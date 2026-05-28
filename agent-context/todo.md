@@ -26,7 +26,7 @@ starter-owned demo session, and expose safe protocol details for developers.
 
 ### SIWC-DEMO02. Implement server-mediated OIDC start/callback/session/logout routes
 
-- Status: Not started
+- Status: Completed 2026-05-28
 - Feature branch: codex/siwc-demo-todos
 - Depends on: SIWC-DEMO01
 
@@ -46,6 +46,11 @@ redirect back to the starter page. The session route should return a redacted
 browser-safe session summary. The logout route should clear only the starter
 demo session by default, preserving the distinction between starter app session
 and Cubid SSO session.
+
+Completion note: starter-owned SIWC API routes now launch Cubid OIDC with
+state, nonce, and PKCE in HttpOnly cookies; handle callbacks server-side; store
+only a short-lived redacted demo session in an HttpOnly cookie; expose a safe
+session summary; and clear only the starter demo session on logout.
 
 ### SIWC-DEMO03. Add an ordered request/response trace for developer education
 
