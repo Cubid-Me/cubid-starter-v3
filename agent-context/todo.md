@@ -109,7 +109,7 @@ returned by the starter routes.
 
 ### SIWC-DEMO05. Document hosted domain setup for `starter.cubid.me`
 
-- Status: Not started
+- Status: Completed 2026-05-28
 - Feature branch: codex/siwc-demo-todos
 - Depends on: SIWC-DEMO02
 
@@ -125,6 +125,11 @@ and Cubid Admin client configuration for:
 Call out that `starter.cubid.me` being a Cubid subdomain is acceptable. The
 starter remains a relying party/client, while `login.cubid.me` owns passkeys
 and Cubid SSO.
+
+Completion note: README and `.env.example` now document the server-mediated
+SIWC issuer, client id, callback URL, scopes, local callback, hosted
+`starter.cubid.me` callback, preview callback handling, post-logout URL, and
+why a Cubid subdomain can still demo OIDC as a relying-party client.
 
 ### SIWC-DEMO06. Validate the demo panel locally and against hosted Cubid
 

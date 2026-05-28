@@ -35,3 +35,12 @@
 - Summary: Added the visible SIWC/SSO demo panel with normal, force-login, force-consent, starter-session logout, hosted Cubid logout, and safe trace rendering.
 - Validation: `pnpm typecheck`; `pnpm lint`
 - Follow-ups: Document local, hosted, and preview SIWC setup for starter v3.
+
+## 2026-05-28T20:47:15Z
+
+- Agent: Codex
+- Branch: codex/siwc-demo-todos
+- Head: 04535e4
+- Summary: Documented server-mediated SIWC env setup, local and hosted callback URLs, preview deployment handling, and why `starter.cubid.me` remains a relying-party demo client.
+- Validation: `git diff --check -- README.md .env.example`
+- Follow-ups: Validate the demo panel locally and record any hosted Cubid gaps.

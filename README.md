@@ -60,11 +60,39 @@ Server-only values are read only by `src/app/api/cubid/server-demo/route.ts`:
 CUBID_API_BASE_URL=https://passport.cubid.me
 CUBID_API_KEY=your-dapp-api-key
 CUBID_DAPP_ID=your-dapp-id
+CUBID_SIWC_ISSUER_URL=https://id.cubid.me
+CUBID_SIWC_CLIENT_ID=your-oidc-client-id
+CUBID_SIWC_REDIRECT_URI=http://localhost:3000/api/cubid/siwc/callback
+CUBID_SIWC_SCOPE="openid profile email"
 ```
 
 Never rename server credentials to `NEXT_PUBLIC_*`. The starter intentionally
 fails the server demo with a safe setup response when `CUBID_API_BASE_URL` or
 `CUBID_API_KEY` is missing.
+
+### Required For Cubid To Work
+
+Set these values in `.env.local` before testing live Cubid flows:
+
+| Variable | Required for | Where to get it |
+| --- | --- | --- |
+| `NEXT_PUBLIC_CUBID_ISSUER_URL` | Login with Cubid / OIDC PKCE discovery. | Cubid issuer URL, usually `https://id.cubid.me`. |
+| `NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID` | Browser sign-in launch and callback handling. | Create or copy the OIDC client id in [Cubid Admin](https://admin.cubid.me/). |
+| `NEXT_PUBLIC_CUBID_REDIRECT_URI` | OIDC callback validation. | Use your local callback URL, for example `http://localhost:3000/auth/callback`, and register the same URL on the OIDC client. |
+| `NEXT_PUBLIC_CUBID_PASSPORT_BASE_URL` | Hosted Cubid browser flows such as ClearPass Verify, comms, and recovery launchers. | Cubid hosted app/API origin, usually `https://passport.cubid.me`. |
+| `CUBID_SIWC_ISSUER_URL` | Server-mediated SIWC issuer discovery. | Cubid issuer URL, usually `https://id.cubid.me`. |
+| `CUBID_SIWC_CLIENT_ID` | Server-mediated SIWC start and callback routes. | Create or copy the OIDC client id in [Cubid Admin](https://admin.cubid.me/). |
+| `CUBID_SIWC_REDIRECT_URI` | Server-mediated SIWC callback handling. | Use `http://localhost:3000/api/cubid/siwc/callback` locally and register that exact URL on the OIDC client. |
+| `CUBID_API_BASE_URL` | Server API demo calls through `@cubid/core`. | Cubid API origin, usually `https://passport.cubid.me`. |
+| `CUBID_API_KEY` | Server-side dapp API calls such as ensure user, identity, score, stamps, and recovery metadata. | Generate or copy your dapp API key in [Cubid Admin](https://admin.cubid.me/). Keep it server-only. |
+
+### Optional Or Flow-Specific
+
+| Variable | Used for | Notes |
+| --- | --- | --- |
+| `CUBID_DAPP_ID` | Cubid API endpoints that require an explicit dapp id. | Set it if your Cubid environment or API key is scoped by dapp id. Keep it server-only unless Cubid explicitly provides a public page/dapp id for a browser flow. |
+| `CUBID_SIWC_SCOPE` | Server-mediated SIWC scopes. | Defaults to `openid profile email`. Add scopes only when the consuming app has a clear need and Cubid Admin allows them for the client. |
+| `NEXT_PUBLIC_CUBID_CLEARPASS_PAGE_ID` | ClearPass Verify launcher. | Required only for the ClearPass Verify demo. This is browser-safe because it identifies a hosted verification page, not a secret. |
 
 ## Cubid Console Setup
 
@@ -72,8 +100,30 @@ Create or configure an OIDC client in Cubid with:
 
 - Issuer URL: the Cubid issuer, for example `https://id.cubid.me`.
 - Client id: copied into `NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID`.
-- Redirect URI: `http://localhost:3000/auth/callback` for local dev.
+- Browser callback redirect URI: `http://localhost:3000/auth/callback` for the
+  legacy browser-only demo.
+- Server SIWC callback redirect URI:
+  `http://localhost:3000/api/cubid/siwc/callback` for the server-mediated
+  protocol demo.
 - Post-logout redirect URI: `http://localhost:3000` for local dev.
+
+For a hosted starter at `https://starter.cubid.me`, register:
+
+- App origin: `https://starter.cubid.me`.
+- Server SIWC callback redirect URI:
+  `https://starter.cubid.me/api/cubid/siwc/callback`.
+- Post-logout redirect URI: `https://starter.cubid.me`.
+
+For preview deployments, register the preview callback URL exactly as Vercel
+serves it, for example
+`https://cubid-starter-v3-git-branch-org.vercel.app/api/cubid/siwc/callback`.
+Do not reuse the production callback URL for previews unless the preview is
+served from that same origin.
+
+`starter.cubid.me` is acceptable even though it is a Cubid subdomain. The
+starter remains an OIDC client/relying party. Cubid passkeys and SSO are owned
+by the Cubid login issuer, and the starter receives only the OIDC callback and
+its own short-lived demo session.
 
 Create or configure your dapp API credentials with:
 
