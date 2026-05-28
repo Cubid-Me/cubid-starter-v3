@@ -44,3 +44,12 @@
 - Summary: Documented server-mediated SIWC env setup, local and hosted callback URLs, preview deployment handling, and why `starter.cubid.me` remains a relying-party demo client.
 - Validation: `git diff --check -- README.md .env.example`
 - Follow-ups: Validate the demo panel locally and record any hosted Cubid gaps.
+
+## 2026-05-28T20:48:25Z
+
+- Agent: Codex
+- Branch: codex/siwc-demo-todos
+- Head: d8c5dae
+- Summary: Validated the implemented starter SIWC demo as far as local configuration allows and recorded the live OIDC round-trip blocker.
+- Validation: `pnpm lint`; `pnpm typecheck`; `pnpm build`; built server smoke checks on `http://localhost:3210/api/cubid/siwc/session`, `POST /api/cubid/siwc/logout`, and `GET /api/cubid/siwc/start`.
+- Follow-ups: Configure `CUBID_SIWC_CLIENT_ID` or `NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID` with a registered callback URL, then complete the live Cubid redirect/callback validation.

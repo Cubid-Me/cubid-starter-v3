@@ -133,7 +133,7 @@ why a Cubid subdomain can still demo OIDC as a relying-party client.
 
 ### SIWC-DEMO06. Validate the demo panel locally and against hosted Cubid
 
-- Status: Not started
+- Status: Blocked 2026-05-28 on local Cubid OIDC client configuration
 - Feature branch: codex/siwc-demo-todos
 - Depends on: SIWC-DEMO03, SIWC-DEMO04, SIWC-DEMO05
 
@@ -152,3 +152,10 @@ Validate the panel with browser testing and record the result. Cover:
 This todo is complete when the demo reliably shows "not signed in yet" on page
 load, launches SIWC, returns to "successfully signed in" after callback, and
 prints the ordered safe request/response trace.
+
+Validation note: local static/type/build validation passed. A built server on
+port 3210 returned `not_signed_in` for the session route, cleared only the
+starter session through logout, and returned a safe `missing_config` response
+from the start route because no local SIWC/OIDC client id is configured. The
+live Cubid redirect/callback round trip remains open until a registered client
+id and callback URL are available locally or in a hosted preview environment.
