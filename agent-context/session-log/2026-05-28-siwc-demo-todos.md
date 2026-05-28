@@ -26,3 +26,12 @@
 - Summary: Added a server-maintained SIWC trace covering discovery, authorization, callback, token exchange, userinfo, session creation, and starter-session logout.
 - Validation: `pnpm typecheck`
 - Follow-ups: Add visible SSO demonstration controls and wire the panel actions to the SIWC routes.
+
+## 2026-05-28T20:46:10Z
+
+- Agent: Codex
+- Branch: codex/siwc-demo-todos
+- Head: 3f2c329
+- Summary: Added the visible SIWC/SSO demo panel with normal, force-login, force-consent, starter-session logout, hosted Cubid logout, and safe trace rendering.
+- Validation: `pnpm typecheck`; `pnpm lint`
+- Follow-ups: Document local, hosted, and preview SIWC setup for starter v3.

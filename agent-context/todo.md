@@ -83,7 +83,7 @@ presence flags.
 
 ### SIWC-DEMO04. Add SSO demonstration controls
 
-- Status: Not started
+- Status: Completed 2026-05-28
 - Feature branch: codex/siwc-demo-todos
 - Depends on: SIWC-DEMO02
 
@@ -101,6 +101,11 @@ The panel copy should explain that a passkey scoped to `cubid.me` does not
 automatically log the user into the starter. It only becomes relevant when
 Cubid's login surface starts a WebAuthn ceremony, and an existing Cubid session
 may legitimately skip that ceremony.
+
+Completion note: the browser demo now includes a server-mediated SIWC/SSO panel
+with normal sign-in, force-login, force-consent, starter-session-only logout,
+and a Cubid logout link. The panel renders the safe session/trace payload
+returned by the starter routes.
 
 ### SIWC-DEMO05. Document hosted domain setup for `starter.cubid.me`
 
