@@ -11,11 +11,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   buildErrorPayload,
+  appendTrace,
   clearSiwcDemoTransaction,
   getSiwcDemoConfig,
   readReturnToCookie,
   readTransactionCookie,
   setSessionCookie,
+  traceEntry,
 } from "@/lib/cubid/siwc-demo";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +92,55 @@ export async function GET(request: NextRequest) {
       subject: authSession.subject,
       userInfo: authSession.userInfo,
     });
+    appendTrace(request, response, [
+      traceEntry("callback", "Receive Cubid callback", {
+        request: {
+          codePresent: true,
+          issuer: callback.iss,
+          sessionStatePresent: Boolean(callback.sessionState),
+          stateMatched: true,
+        },
+      }),
+      traceEntry("token", "Exchange authorization code server-side", {
+        request: {
+          clientId: config.clientId,
+          codePresent: true,
+          codeVerifierPresent: true,
+          grantType: "authorization_code",
+          redirectUri: transaction.redirectUri,
+          tokenEndpoint: discovery.token_endpoint,
+        },
+        response: {
+          accessToken: tokenResponse.accessToken ? "[redacted]" : null,
+          expiresAt: tokenResponse.expiresAt,
+          expiresIn: tokenResponse.expiresIn,
+          idToken: tokenResponse.idToken ? "[redacted]" : null,
+          refreshToken: tokenResponse.refreshToken ? "[redacted]" : null,
+          scope: tokenResponse.scope,
+          tokenType: tokenResponse.tokenType,
+        },
+      }),
+      traceEntry("userinfo", "Fetch userinfo with server-side access token", {
+        request: {
+          accessToken: tokenResponse.accessToken ? "[redacted]" : null,
+          userInfoEndpoint: discovery.userinfo_endpoint ?? null,
+        },
+        response: {
+          enabled: Boolean(discovery.userinfo_endpoint),
+          subject: userInfo?.sub ?? null,
+          userInfo,
+        },
+      }),
+      traceEntry("session", "Create starter demo session", {
+        response: {
+          authenticated: true,
+          expiresAt: authSession.expiresAt,
+          issuer: authSession.issuer,
+          scope: authSession.scope,
+          subject: authSession.subject,
+        },
+      }),
+    ]);
     clearSiwcDemoTransaction(response);
 
     return response;

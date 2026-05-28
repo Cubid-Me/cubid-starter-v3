@@ -10,6 +10,7 @@ import type { NextRequest, NextResponse } from "next/server";
 export const siwcDemoCookies = {
   returnTo: "cubid_siwc_return_to",
   session: "cubid_siwc_demo_session",
+  trace: "cubid_siwc_trace",
   transaction: "cubid_siwc_txn",
 } as const;
 
@@ -33,6 +34,14 @@ export type SiwcDemoSession = {
   scope: string[];
   subject: string | null;
   userInfo: CubidUserInfo | null;
+};
+
+export type SiwcDemoTraceEntry = {
+  at: string;
+  label: string;
+  request?: Record<string, unknown>;
+  response?: Record<string, unknown>;
+  step: string;
 };
 
 export type SiwcDemoConfig =
@@ -151,6 +160,24 @@ export function setSessionCookie(
   );
 }
 
+export function setTraceCookie(
+  response: NextResponse,
+  request: NextRequest,
+  trace: SiwcDemoTraceEntry[]
+) {
+  response.cookies.set(
+    siwcDemoCookies.trace,
+    encodeCookiePayload(trace.slice(-12)),
+    {
+      httpOnly: true,
+      maxAge: sessionMaxAgeSeconds,
+      path: "/",
+      sameSite: "lax",
+      secure: request.nextUrl.protocol === "https:",
+    }
+  );
+}
+
 export function readTransactionCookie(
   request: NextRequest
 ): SiwcDemoTransaction | null {
@@ -162,6 +189,14 @@ export function readTransactionCookie(
 export function readSessionCookie(request: NextRequest): SiwcDemoSession | null {
   return readCookiePayload<SiwcDemoSession>(
     request.cookies.get(siwcDemoCookies.session)?.value
+  );
+}
+
+export function readTraceCookie(request: NextRequest): SiwcDemoTraceEntry[] {
+  return (
+    readCookiePayload<SiwcDemoTraceEntry[]>(
+      request.cookies.get(siwcDemoCookies.trace)?.value
+    ) ?? []
   );
 }
 
@@ -180,11 +215,36 @@ export function clearSiwcDemoSession(response: NextResponse) {
   response.cookies.delete(siwcDemoCookies.session);
 }
 
-export function buildSessionSummary(session: SiwcDemoSession | null) {
+export function appendTrace(
+  request: NextRequest,
+  response: NextResponse,
+  entries: SiwcDemoTraceEntry[]
+) {
+  setTraceCookie(response, request, [...readTraceCookie(request), ...entries]);
+}
+
+export function traceEntry(
+  step: string,
+  label: string,
+  details: Omit<SiwcDemoTraceEntry, "at" | "label" | "step"> = {}
+): SiwcDemoTraceEntry {
+  return {
+    at: new Date().toISOString(),
+    label,
+    step,
+    ...details,
+  };
+}
+
+export function buildSessionSummary(
+  session: SiwcDemoSession | null,
+  trace: SiwcDemoTraceEntry[] = []
+) {
   if (!session) {
     return {
       authenticated: false,
       status: "not_signed_in",
+      trace,
     };
   }
 
@@ -201,6 +261,7 @@ export function buildSessionSummary(session: SiwcDemoSession | null) {
       userInfo: session.userInfo,
     },
     status: "signed_in",
+    trace,
   };
 }
 

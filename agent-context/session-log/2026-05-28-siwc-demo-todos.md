@@ -17,3 +17,12 @@
 - Summary: Implemented starter-owned SIWC route handlers for OIDC start, callback, session summary, and starter-session logout.
 - Validation: `git diff --check -- src/lib/cubid/siwc-demo.ts src/app/api/cubid/siwc/start/route.ts src/app/api/cubid/siwc/callback/route.ts src/app/api/cubid/siwc/session/route.ts src/app/api/cubid/siwc/logout/route.ts`; `pnpm typecheck`
 - Follow-ups: Add the ordered request/response trace and browser panel rendering for SIWC-DEMO03.
+
+## 2026-05-28T20:43:35Z
+
+- Agent: Codex
+- Branch: codex/siwc-demo-todos
+- Head: ecab6e4
+- Summary: Added a server-maintained SIWC trace covering discovery, authorization, callback, token exchange, userinfo, session creation, and starter-session logout.
+- Validation: `pnpm typecheck`
+- Follow-ups: Add visible SSO demonstration controls and wire the panel actions to the SIWC routes.

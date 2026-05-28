@@ -54,7 +54,7 @@ session summary; and clear only the starter demo session on logout.
 
 ### SIWC-DEMO03. Add an ordered request/response trace for developer education
 
-- Status: Not started
+- Status: Completed 2026-05-28
 - Feature branch: codex/siwc-demo-todos
 - Depends on: SIWC-DEMO02
 
@@ -74,6 +74,12 @@ flow, while redacting secrets and bearer tokens. Include at least:
 
 The trace should persist across the callback redirect long enough to render the
 complete flow after the user returns to the starter page.
+
+Completion note: the SIWC routes now maintain a short-lived ordered trace for
+discovery, authorization, callback, token exchange, userinfo, session creation,
+and starter-session logout. The session route returns the trace with token,
+code, verifier, nonce, and cookie values redacted or represented only by
+presence flags.
 
 ### SIWC-DEMO04. Add SSO demonstration controls
 

@@ -11,7 +11,9 @@ import {
   buildErrorPayload,
   getSiwcDemoConfig,
   setReturnToCookie,
+  setTraceCookie,
   setTransactionCookie,
+  traceEntry,
 } from "@/lib/cubid/siwc-demo";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +69,39 @@ export async function GET(request: NextRequest) {
       request,
       request.nextUrl.searchParams.get("return_to") ?? "/"
     );
+    setTraceCookie(response, request, [
+      traceEntry("discovery", "Fetch issuer discovery metadata", {
+        request: {
+          issuer: config.issuer,
+          method: "GET",
+        },
+        response: {
+          authorizationEndpoint: discovery.authorization_endpoint,
+          issuer: discovery.issuer,
+          tokenEndpoint: discovery.token_endpoint,
+          userInfoEndpoint: discovery.userinfo_endpoint ?? null,
+        },
+      }),
+      traceEntry("authorization", "Redirect to Cubid authorization endpoint", {
+        request: {
+          acrValues: "urn:cubid:acr:passkey",
+          clientId: config.clientId,
+          codeChallengeMethod: pkce.codeChallengeMethod,
+          codeChallengePresent: true,
+          maxAge: Number.isFinite(maxAge) ? maxAge : null,
+          noncePresent: true,
+          prompt: prompt ?? null,
+          redirectUri: config.redirectUri,
+          responseType: "code",
+          scope: config.scope,
+          statePresent: true,
+        },
+        response: {
+          redirectTo: discovery.authorization_endpoint,
+          status: 307,
+        },
+      }),
+    ]);
 
     return response;
   } catch (error) {
