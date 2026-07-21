@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   buildErrorPayload,
+  assertSiwcDiscoveryIssuer,
   getSiwcDemoConfig,
   setReturnToCookie,
   setTraceCookie,
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
     const discovery = await fetchCubidOidcDiscoveryDocument({
       issuer: config.issuer,
     });
+    assertSiwcDiscoveryIssuer(config.issuer, discovery.issuer);
     const pkce = await createCubidPkcePair();
     const state = createCubidAuthState();
     const nonce = createCubidAuthNonce();
@@ -77,6 +79,7 @@ export async function GET(request: NextRequest) {
         },
         response: {
           authorizationEndpoint: discovery.authorization_endpoint,
+          endSessionEndpoint: discovery.end_session_endpoint ?? null,
           issuer: discovery.issuer,
           tokenEndpoint: discovery.token_endpoint,
           userInfoEndpoint: discovery.userinfo_endpoint ?? null,

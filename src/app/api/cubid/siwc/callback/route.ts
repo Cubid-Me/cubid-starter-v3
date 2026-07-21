@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   buildErrorPayload,
   appendTrace,
+  assertSiwcDiscoveryIssuer,
   clearSiwcDemoTransaction,
   getSiwcDemoConfig,
   readReturnToCookie,
@@ -47,6 +48,7 @@ export async function GET(request: NextRequest) {
     const discovery = await fetchCubidOidcDiscoveryDocument({
       issuer: transaction.issuer,
     });
+    assertSiwcDiscoveryIssuer(transaction.issuer, discovery.issuer);
     const tokenResponse = await exchangeCubidAuthorizationCode({
       clientId: config.clientId,
       code: callback.code,
@@ -145,8 +147,15 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch (error) {
-    const response = redirectWithError(request, returnTo, "callback_failed");
-    response.cookies.set("cubid_siwc_last_error", JSON.stringify(buildErrorPayload(error)), {
+    const errorPayload = buildErrorPayload(error);
+    const response = redirectWithError(
+      request,
+      returnTo,
+      "code" in errorPayload && typeof errorPayload.code === "string"
+        ? errorPayload.code
+        : "callback_failed"
+    );
+    response.cookies.set("cubid_siwc_last_error", JSON.stringify(errorPayload), {
       httpOnly: true,
       maxAge: 60,
       path: "/",

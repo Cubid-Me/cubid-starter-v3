@@ -125,6 +125,15 @@ starter remains an OIDC client/relying party. Cubid passkeys and SSO are owned
 by the Cubid login issuer, and the starter receives only the OIDC callback and
 its own short-lived demo session.
 
+The server-mediated demo reads every concrete OIDC endpoint from discovery and
+rejects discovery metadata whose issuer does not exactly match the configured
+issuer (ignoring only a trailing slash). The optional Cubid-hosted logout link
+is shown only after discovery provides `end_session_endpoint`; the starter does
+not construct issuer-relative endpoint paths. Visible session and trace output
+redacts token material, authorization codes, PKCE verifiers, nonce/state values,
+cookies, and direct PII while retaining protocol facts and the app-scoped
+pairwise subject.
+
 Create or configure your dapp API credentials with:
 
 - Cubid API base URL: copied into `CUBID_API_BASE_URL`.
@@ -147,10 +156,26 @@ publishing catches up, especially for `@cubid/comms`.
 ## Validation
 
 ```sh
+pnpm test
 pnpm lint
 pnpm typecheck
 pnpm build
 ```
+
+The focused tests cover missing configuration, mismatched callback state,
+mismatched ID-token nonce, configured/discovered issuer mismatch, safe return
+paths, and recursive trace/session redaction.
+
+## Production Deployment Handoff
+
+Do not deploy this branch as part of the implementation task. The deployment
+task must first merge this PR, then configure the production Vercel project
+with `CUBID_SIWC_ISSUER_URL=https://id.cubid.me`, the registered production
+client id, and the exact
+`https://starter.cubid.me/api/cubid/siwc/callback` redirect URI. Register that
+same callback and `https://starter.cubid.me` post-logout URI on the production
+relying-party client. Keep preview callbacks separate and exact; never use a
+staging issuer as an implicit production fallback.
 
 The browser demo can render without server credentials. The server demo returns
 a non-secret setup message until server-only Cubid credentials are present in

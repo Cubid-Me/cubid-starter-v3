@@ -49,7 +49,10 @@ type SiwcDemoSessionResponse = {
   authenticated: boolean;
   session?: Record<string, unknown>;
   status: string;
-  trace?: Array<Record<string, unknown>>;
+  trace?: Array<{
+    response?: Record<string, unknown>;
+    step?: string;
+  }>;
 };
 
 export function BrowserDemo() {
@@ -57,12 +60,12 @@ export function BrowserDemo() {
 
   if (missing.length > 0) {
     return (
-      <section className="grid gap-4 rounded-lg border border-[#d9ddd2] bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
+      <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 rounded-lg border border-[#d9ddd2] bg-white p-5 shadow-sm">
+        <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#dbe9d6] text-[#1f6f50]">
             <Fingerprint size={20} aria-hidden="true" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="text-xl font-semibold">Browser UX demo</h2>
             <p className="mt-2 text-sm leading-6 text-[#596456]">
               Add the browser-safe `NEXT_PUBLIC_CUBID_*` values from
@@ -71,7 +74,7 @@ export function BrowserDemo() {
             </p>
           </div>
         </div>
-        <div className="mt-5 rounded-md border border-[#e4d4a1] bg-[#fffbea] p-4 text-sm text-[#665313]">
+        <div className="mt-5 break-words rounded-md border border-[#e4d4a1] bg-[#fffbea] p-4 text-sm text-[#665313]">
           Missing browser-safe config: {missing.join(", ")}
         </div>
         <ServerMediatedSiwcPanel />
@@ -172,7 +175,7 @@ function BrowserDemoPanel() {
   }
 
   return (
-    <section className="rounded-lg border border-[#d9ddd2] bg-white p-5 shadow-sm">
+    <section className="min-w-0 rounded-lg border border-[#d9ddd2] bg-white p-5 shadow-sm">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#dbe9d6] text-[#1f6f50]">
           <Fingerprint size={20} aria-hidden="true" />
@@ -316,9 +319,9 @@ function ServerMediatedSiwcPanel() {
   const [session, setSession] = useState<SiwcDemoSessionResponse | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
-  const cubidLogoutUrl = publicConfig.issuer
-    ? `${publicConfig.issuer.replace(/\/+$/u, "")}/logout`
-    : null;
+  const cubidLogoutUrl = session?.trace?.find(
+    (entry) => entry.step === "discovery"
+  )?.response?.endSessionEndpoint;
 
   useEffect(() => {
     void loadSession();
@@ -383,12 +386,12 @@ function ServerMediatedSiwcPanel() {
   }
 
   return (
-    <div className="rounded-lg border border-[#cfd8c8] bg-[#f8faf6] p-4">
-      <div className="flex items-start gap-3">
+    <div className="min-w-0 rounded-lg border border-[#cfd8c8] bg-[#f8faf6] p-4">
+      <div className="flex min-w-0 items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-[#1f6f50]">
           <ShieldCheck size={18} aria-hidden="true" />
         </div>
-        <div>
+        <div className="min-w-0">
           <h3 className="text-base font-semibold">SIWC / SSO protocol demo</h3>
           <p className="mt-2 text-sm leading-6 text-[#596456]">
             This panel starts Cubid-hosted OIDC from starter-owned server
@@ -431,7 +434,7 @@ function ServerMediatedSiwcPanel() {
           <RefreshCcw size={16} aria-hidden="true" />
           Clear starter session
         </button>
-        {cubidLogoutUrl ? (
+        {typeof cubidLogoutUrl === "string" ? (
           <a
             className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#cfd6c7] bg-white px-4 text-sm font-semibold text-[#1d2a1e] transition hover:bg-[#eef3eb]"
             href={cubidLogoutUrl}
@@ -448,7 +451,7 @@ function ServerMediatedSiwcPanel() {
         </div>
       ) : null}
 
-      <pre className="mt-4 max-h-80 overflow-auto rounded-md border border-[#dce2d6] bg-white p-3 text-xs leading-5 text-[#263026]">
+      <pre className="mt-4 max-h-80 max-w-full overflow-auto rounded-md border border-[#dce2d6] bg-white p-3 text-xs leading-5 text-[#263026]">
         {status === "loading" && !session
           ? "Loading SIWC demo session..."
           : JSON.stringify(

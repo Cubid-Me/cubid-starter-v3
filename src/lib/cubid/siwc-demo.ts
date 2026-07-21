@@ -16,6 +16,31 @@ export const siwcDemoCookies = {
 
 const transactionMaxAgeSeconds = 10 * 60;
 const sessionMaxAgeSeconds = 30 * 60;
+const redactedValue = "[redacted]";
+const sensitiveBrowserKeys = new Set([
+  "access_token",
+  "accessToken",
+  "address",
+  "birthdate",
+  "code",
+  "code_verifier",
+  "codeVerifier",
+  "cookie",
+  "cookies",
+  "email",
+  "family_name",
+  "given_name",
+  "id_token",
+  "idToken",
+  "name",
+  "nonce",
+  "phone_number",
+  "picture",
+  "preferred_username",
+  "refresh_token",
+  "refreshToken",
+  "state",
+]);
 
 export type SiwcDemoTransaction = {
   codeVerifier: string;
@@ -232,7 +257,10 @@ export function traceEntry(
     at: new Date().toISOString(),
     label,
     step,
-    ...details,
+    ...(redactSiwcDemoValue(details) as Omit<
+      SiwcDemoTraceEntry,
+      "at" | "label" | "step"
+    >),
   };
 }
 
@@ -252,13 +280,13 @@ export function buildSessionSummary(
     authenticated: true,
     session: {
       authenticatedAt: session.authenticatedAt,
-      claims: session.claims,
+      claims: redactSiwcDemoValue(session.claims),
       clientId: session.clientId,
       expiresAt: session.expiresAt,
       issuer: session.issuer,
       scope: session.scope,
       subject: session.subject,
-      userInfo: session.userInfo,
+      userInfo: redactSiwcDemoValue(session.userInfo),
     },
     status: "signed_in",
     trace,
@@ -296,6 +324,25 @@ export function normalizeReturnTo(value: string): string {
   return value;
 }
 
+export function assertSiwcDiscoveryIssuer(
+  configuredIssuer: string,
+  discoveryIssuer: string
+): void {
+  if (normalizeIssuer(configuredIssuer) !== normalizeIssuer(discoveryIssuer)) {
+    throw new CubidAuthError(
+      "Cubid discovery metadata did not match the configured issuer.",
+      {
+        category: "validation",
+        code: "discovery_issuer_mismatch",
+      }
+    );
+  }
+}
+
+export function redactSiwcDemoValue(value: unknown): unknown {
+  return redactValue(value);
+}
+
 function encodeCookiePayload(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
@@ -310,4 +357,33 @@ function readCookiePayload<T>(value: string | undefined): T | null {
   } catch {
     return null;
   }
+}
+
+function normalizeIssuer(value: string): string {
+  const url = new URL(value);
+  url.hash = "";
+  url.search = "";
+  url.pathname = url.pathname.replace(/\/+$/u, "") || "/";
+  return url.toString().replace(/\/$/u, "");
+}
+
+function redactValue(value: unknown, key?: string): unknown {
+  if (key && sensitiveBrowserKeys.has(key)) {
+    return value === null || typeof value === "undefined" ? value : redactedValue;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactValue(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        redactValue(entryValue, entryKey),
+      ])
+    );
+  }
+
+  return value;
 }

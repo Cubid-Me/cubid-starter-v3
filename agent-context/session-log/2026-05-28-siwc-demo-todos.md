@@ -53,3 +53,12 @@
 - Summary: Validated the implemented starter SIWC demo as far as local configuration allows and recorded the live OIDC round-trip blocker.
 - Validation: `pnpm lint`; `pnpm typecheck`; `pnpm build`; built server smoke checks on `http://localhost:3210/api/cubid/siwc/session`, `POST /api/cubid/siwc/logout`, and `GET /api/cubid/siwc/start`.
 - Follow-ups: Configure `CUBID_SIWC_CLIENT_ID` or `NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID` with a registered callback URL, then complete the live Cubid redirect/callback validation.
+
+## 2026-07-21T02:28:04Z
+
+- Agent: Codex issue-implementer
+- Branch: codex/siwc-demo-todos
+- Head: ef43a4c
+- Summary: Reconciled STARTER-01 and the three registered dirty UI files with the SDK production issuer handoff; added exact configured/discovered issuer validation, discovery-owned logout metadata, recursive trace/session secret and PII redaction, focused route/helper tests, a complete env reference, and responsive demo hardening.
+- Validation: `pnpm test` (7 passed); `pnpm lint`; `pnpm typecheck`; `pnpm build`; `git diff --check`; production-server API smoke on port 3210 for unsigned session, safe missing configuration, and starter-only logout; Playwright desktop and 390px mobile snapshots/screenshots, including verification that mobile document width is 375px with no horizontal overflow.
+- Follow-ups: Independent issue validation is required before moving STARTER-01 to In Review. STARTER-02 owns Vercel deployment, production env configuration, relying-party registration, and the hosted callback round trip; do not deploy from this task.

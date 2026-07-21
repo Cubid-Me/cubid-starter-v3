@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 
 import { BrowserDemo } from "@/components/cubid/browser-demo";
+import { EnvReferencePanel } from "@/components/cubid/env-reference-panel";
 import { ServerDemo } from "@/components/cubid/server-demo";
 
 const capabilities = [
@@ -114,6 +115,10 @@ export default function Home() {
       <div className="mx-auto grid max-w-7xl gap-6 px-6 py-8 lg:grid-cols-[0.95fr_1.05fr] lg:px-8">
         <ServerDemo />
         <BrowserDemo />
+      </div>
+
+      <div className="mx-auto max-w-7xl px-6 pb-10 lg:px-8">
+        <EnvReferencePanel />
       </div>
     </main>
   );
