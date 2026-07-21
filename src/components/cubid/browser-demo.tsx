@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { buildClearPassVerifyUrl } from "@cubid/browser";
 import { createCubidCommsClient } from "@cubid/comms";
 import {
@@ -19,6 +19,8 @@ import {
   KeyRound,
   LoaderCircle,
   LogIn,
+  RefreshCcw,
+  ShieldCheck,
 } from "lucide-react";
 
 const publicConfig = {
@@ -43,17 +45,27 @@ function summarizeToken(token: string | null | undefined) {
   return `${token.slice(0, 8)}...${token.slice(-6)} (${token.length} chars)`;
 }
 
+type SiwcDemoSessionResponse = {
+  authenticated: boolean;
+  session?: Record<string, unknown>;
+  status: string;
+  trace?: Array<{
+    response?: Record<string, unknown>;
+    step?: string;
+  }>;
+};
+
 export function BrowserDemo() {
   const missing = missingPublicConfig();
 
   if (missing.length > 0) {
     return (
-      <section className="rounded-lg border border-[#d9ddd2] bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
+      <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 rounded-lg border border-[#d9ddd2] bg-white p-5 shadow-sm">
+        <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#dbe9d6] text-[#1f6f50]">
             <Fingerprint size={20} aria-hidden="true" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="text-xl font-semibold">Browser UX demo</h2>
             <p className="mt-2 text-sm leading-6 text-[#596456]">
               Add the browser-safe `NEXT_PUBLIC_CUBID_*` values from
@@ -62,9 +74,10 @@ export function BrowserDemo() {
             </p>
           </div>
         </div>
-        <div className="mt-5 rounded-md border border-[#e4d4a1] bg-[#fffbea] p-4 text-sm text-[#665313]">
+        <div className="mt-5 break-words rounded-md border border-[#e4d4a1] bg-[#fffbea] p-4 text-sm text-[#665313]">
           Missing browser-safe config: {missing.join(", ")}
         </div>
+        <ServerMediatedSiwcPanel />
       </section>
     );
   }
@@ -162,7 +175,7 @@ function BrowserDemoPanel() {
   }
 
   return (
-    <section className="rounded-lg border border-[#d9ddd2] bg-white p-5 shadow-sm">
+    <section className="min-w-0 rounded-lg border border-[#d9ddd2] bg-white p-5 shadow-sm">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#dbe9d6] text-[#1f6f50]">
           <Fingerprint size={20} aria-hidden="true" />
@@ -178,6 +191,8 @@ function BrowserDemoPanel() {
       </div>
 
       <div className="mt-6 grid gap-4">
+        <ServerMediatedSiwcPanel />
+
         <div className="rounded-lg border border-[#dce2d6] bg-[#f8faf6] p-4">
           <div className="flex flex-wrap items-center gap-3">
             {auth.isAuthenticated ? (
@@ -297,5 +312,158 @@ function BrowserDemoPanel() {
         </div>
       </div>
     </section>
+  );
+}
+
+function ServerMediatedSiwcPanel() {
+  const [session, setSession] = useState<SiwcDemoSessionResponse | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const cubidLogoutUrl = session?.trace?.find(
+    (entry) => entry.step === "discovery"
+  )?.response?.endSessionEndpoint;
+
+  useEffect(() => {
+    void loadSession();
+  }, []);
+
+  async function loadSession() {
+    setStatus("loading");
+    setError(null);
+
+    try {
+      const response = await fetch("/api/cubid/siwc/session", {
+        headers: { accept: "application/json" },
+      });
+      const payload = (await response.json()) as SiwcDemoSessionResponse;
+      setSession(payload);
+      setStatus("idle");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to load the SIWC demo session."
+      );
+      setStatus("error");
+    }
+  }
+
+  function startSiwc(options: { maxAge?: number; prompt?: string } = {}) {
+    const params = new URLSearchParams({
+      return_to: window.location.pathname,
+    });
+
+    if (options.prompt) {
+      params.set("prompt", options.prompt);
+    }
+
+    if (typeof options.maxAge === "number") {
+      params.set("max_age", String(options.maxAge));
+    }
+
+    window.location.assign(`/api/cubid/siwc/start?${params.toString()}`);
+  }
+
+  async function clearStarterSession() {
+    setStatus("loading");
+    setError(null);
+
+    try {
+      const response = await fetch("/api/cubid/siwc/logout", {
+        headers: { accept: "application/json" },
+        method: "POST",
+      });
+      await response.json();
+      await loadSession();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to clear the starter demo session."
+      );
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div className="min-w-0 rounded-lg border border-[#cfd8c8] bg-[#f8faf6] p-4">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-[#1f6f50]">
+          <ShieldCheck size={18} aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold">SIWC / SSO protocol demo</h3>
+          <p className="mt-2 text-sm leading-6 text-[#596456]">
+            This panel starts Cubid-hosted OIDC from starter-owned server
+            routes. A passkey scoped to `cubid.me` does not sign into the
+            starter by itself; an existing Cubid SSO session may simply skip the
+            passkey ceremony.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1f6f50] px-4 text-sm font-semibold text-white transition hover:bg-[#18593f]"
+          onClick={() => startSiwc()}
+          type="button"
+        >
+          <LogIn size={16} aria-hidden="true" />
+          Sign in with Cubid
+        </button>
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#cfd6c7] bg-white px-4 text-sm font-semibold text-[#1d2a1e] transition hover:bg-[#eef3eb]"
+          onClick={() => startSiwc({ maxAge: 0, prompt: "login" })}
+          type="button"
+        >
+          Force login
+        </button>
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#cfd6c7] bg-white px-4 text-sm font-semibold text-[#1d2a1e] transition hover:bg-[#eef3eb]"
+          onClick={() => startSiwc({ prompt: "consent" })}
+          type="button"
+        >
+          Force consent
+        </button>
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#cfd6c7] bg-white px-4 text-sm font-semibold text-[#1d2a1e] transition hover:bg-[#eef3eb] disabled:cursor-not-allowed disabled:text-[#8a9585]"
+          disabled={status === "loading"}
+          onClick={clearStarterSession}
+          type="button"
+        >
+          <RefreshCcw size={16} aria-hidden="true" />
+          Clear starter session
+        </button>
+        {typeof cubidLogoutUrl === "string" ? (
+          <a
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#cfd6c7] bg-white px-4 text-sm font-semibold text-[#1d2a1e] transition hover:bg-[#eef3eb]"
+            href={cubidLogoutUrl}
+          >
+            <ExternalLink size={16} aria-hidden="true" />
+            Cubid logout
+          </a>
+        ) : null}
+      </div>
+
+      {error ? (
+        <div className="mt-3 rounded-md border border-[#e0b7ad] bg-[#fff7f5] p-3 text-sm text-[#713022]">
+          {error}
+        </div>
+      ) : null}
+
+      <pre className="mt-4 max-h-80 max-w-full overflow-auto rounded-md border border-[#dce2d6] bg-white p-3 text-xs leading-5 text-[#263026]">
+        {status === "loading" && !session
+          ? "Loading SIWC demo session..."
+          : JSON.stringify(
+              session ?? {
+                authenticated: false,
+                status: "not_signed_in",
+                trace: [],
+              },
+              null,
+              2
+            )}
+      </pre>
+    </div>
   );
 }
