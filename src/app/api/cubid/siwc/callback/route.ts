@@ -17,6 +17,7 @@ import {
   getSiwcDemoConfig,
   readReturnToCookie,
   readTransactionCookie,
+  resolveLocalReturnTo,
   setSessionCookie,
   traceEntry,
 } from "@/lib/cubid/siwc-demo";
@@ -82,7 +83,9 @@ export async function GET(request: NextRequest) {
       tokenResponse,
       userInfo,
     });
-    const response = NextResponse.redirect(new URL(returnTo, request.nextUrl.origin));
+    const response = NextResponse.redirect(
+      resolveLocalReturnTo(returnTo, request.nextUrl.origin)
+    );
 
     setSessionCookie(response, request, {
       authenticatedAt: new Date().toISOString(),
@@ -168,7 +171,7 @@ export async function GET(request: NextRequest) {
 }
 
 function redirectWithError(request: NextRequest, returnTo: string, error: string) {
-  const url = new URL(returnTo, request.nextUrl.origin);
+  const url = resolveLocalReturnTo(returnTo, request.nextUrl.origin);
   url.searchParams.set("siwc_error", error);
   const response = NextResponse.redirect(url);
   clearSiwcDemoTransaction(response);

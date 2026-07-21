@@ -34,6 +34,55 @@ describe("SIWC route guards", () => {
     });
   });
 
+  it.each([
+    "/\\evil.example/proof",
+    "/\\\\evil.example/proof",
+    "/%5Cevil.example/proof",
+    "/%5C%5Cevil.example/proof",
+    "/%255Cevil.example/proof",
+    "//evil.example/proof",
+    "/%2F%2Fevil.example/proof",
+  ])("keeps an unsafe callback return cookie same-origin: %s", async (returnTo) => {
+    delete process.env.CUBID_SIWC_CLIENT_ID;
+    delete process.env.NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID;
+    const request = new NextRequest(
+      "http://localhost:3000/api/cubid/siwc/callback?code=x&state=y",
+      {
+        headers: {
+          cookie: `cubid_siwc_return_to=${returnTo}`,
+        },
+      }
+    );
+
+    const response = await callback(request);
+    const location = new URL(response.headers.get("location")!);
+
+    expect(location.origin).toBe("http://localhost:3000");
+    expect(location.pathname).toBe("/");
+    expect(location.searchParams.get("siwc_error")).toBe("missing_config");
+  });
+
+  it("preserves a safe callback return path and query", async () => {
+    delete process.env.CUBID_SIWC_CLIENT_ID;
+    delete process.env.NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID;
+    const request = new NextRequest(
+      "http://localhost:3000/api/cubid/siwc/callback?code=x&state=y",
+      {
+        headers: {
+          cookie: "cubid_siwc_return_to=/docs/siwc?tab=callback",
+        },
+      }
+    );
+
+    const response = await callback(request);
+    const location = new URL(response.headers.get("location")!);
+
+    expect(location.origin).toBe("http://localhost:3000");
+    expect(location.pathname).toBe("/docs/siwc");
+    expect(location.searchParams.get("tab")).toBe("callback");
+    expect(location.searchParams.get("siwc_error")).toBe("missing_config");
+  });
+
   it("rejects a callback with mismatched state before token exchange", async () => {
     const transaction = Buffer.from(
       JSON.stringify({

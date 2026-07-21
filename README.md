@@ -129,10 +129,12 @@ The server-mediated demo reads every concrete OIDC endpoint from discovery and
 rejects discovery metadata whose issuer does not exactly match the configured
 issuer (ignoring only a trailing slash). The optional Cubid-hosted logout link
 is shown only after discovery provides `end_session_endpoint`; the starter does
-not construct issuer-relative endpoint paths. Visible session and trace output
-redacts token material, authorization codes, PKCE verifiers, nonce/state values,
-cookies, and direct PII while retaining protocol facts and the app-scoped
-pairwise subject.
+not construct issuer-relative endpoint paths. Callback return targets are
+normalized as local paths and resolved only when their origin exactly matches
+the starter request origin; authority-like slash and backslash variants fall
+back to `/`. Visible session and trace output redacts token material,
+authorization codes, PKCE verifiers, nonce/state values, cookies, and direct
+PII while retaining protocol facts and the app-scoped pairwise subject.
 
 Create or configure your dapp API credentials with:
 

@@ -317,11 +317,32 @@ export function buildErrorPayload(error: unknown) {
 }
 
 export function normalizeReturnTo(value: string): string {
-  if (!value.startsWith("/") || value.startsWith("//")) {
-    return "/";
+  const resolved = resolveLocalReturnTo(value, "https://starter.invalid");
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+}
+
+export function resolveLocalReturnTo(value: string, requestOrigin: string): URL {
+  const origin = new URL(requestOrigin).origin;
+
+  if (!hasSafeLocalPathPrefix(value)) {
+    return new URL("/", origin);
   }
 
-  return value;
+  try {
+    const resolved = new URL(value, origin);
+
+    if (
+      resolved.origin !== origin ||
+      resolved.username.length > 0 ||
+      resolved.password.length > 0
+    ) {
+      return new URL("/", origin);
+    }
+
+    return resolved;
+  } catch {
+    return new URL("/", origin);
+  }
 }
 
 export function assertSiwcDiscoveryIssuer(
@@ -365,6 +386,41 @@ function normalizeIssuer(value: string): string {
   url.search = "";
   url.pathname = url.pathname.replace(/\/+$/u, "") || "/";
   return url.toString().replace(/\/$/u, "");
+}
+
+function hasSafeLocalPathPrefix(value: string): boolean {
+  const queryIndex = value.indexOf("?");
+  const hashIndex = value.indexOf("#");
+  const pathEnd = Math.min(
+    queryIndex === -1 ? value.length : queryIndex,
+    hashIndex === -1 ? value.length : hashIndex
+  );
+  let path = value.slice(0, pathEnd);
+
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (
+      !path.startsWith("/") ||
+      path.startsWith("//") ||
+      path.includes("\\") ||
+      /[\u0000-\u001f\u007f]/u.test(path)
+    ) {
+      return false;
+    }
+
+    try {
+      const decoded = decodeURIComponent(path);
+
+      if (decoded === path) {
+        return true;
+      }
+
+      path = decoded;
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
 }
 
 function redactValue(value: unknown, key?: string): unknown {

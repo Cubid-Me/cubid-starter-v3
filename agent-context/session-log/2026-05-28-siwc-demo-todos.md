@@ -62,3 +62,12 @@
 - Summary: Reconciled STARTER-01 and the three registered dirty UI files with the SDK production issuer handoff; added exact configured/discovered issuer validation, discovery-owned logout metadata, recursive trace/session secret and PII redaction, focused route/helper tests, a complete env reference, and responsive demo hardening.
 - Validation: `pnpm test` (7 passed); `pnpm lint`; `pnpm typecheck`; `pnpm build`; `git diff --check`; production-server API smoke on port 3210 for unsigned session, safe missing configuration, and starter-only logout; Playwright desktop and 390px mobile snapshots/screenshots, including verification that mobile document width is 375px with no horizontal overflow.
 - Follow-ups: Independent issue validation is required before moving STARTER-01 to In Review. STARTER-02 owns Vercel deployment, production env configuration, relying-party registration, and the hosted callback round trip; do not deploy from this task.
+
+## 2026-07-21T02:39:25Z
+
+- Agent: Codex issue-implementer
+- Branch: codex/siwc-demo-todos
+- Head: da81ae3
+- Summary: Fixed the STARTER-01 validator's callback open-redirect reproduction by strictly rejecting raw, encoded, and repeatedly encoded authority-like slash/backslash paths and resolving every accepted return target against the exact request origin.
+- Validation: `pnpm test` (22 passed); `pnpm lint`; `pnpm typecheck`; `pnpm build`; `git diff --check`; built server on port 3210 returned same-origin `http://localhost:3210/?siwc_error=missing_config` for `/\\evil.example/proof`, `/%5Cevil.example/proof`, `/%5C%5Cevil.example/proof`, `//evil.example/proof`, and `/%2F%2Fevil.example/proof`, while preserving `/docs/siwc?tab=callback` locally.
+- Follow-ups: Re-run independent validation on the new fix commit before moving STARTER-01 to In Review. STARTER-02 remains out of scope; do not merge or deploy from this task.

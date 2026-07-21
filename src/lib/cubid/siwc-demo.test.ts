@@ -5,6 +5,7 @@ import {
   buildSessionSummary,
   normalizeReturnTo,
   redactSiwcDemoValue,
+  resolveLocalReturnTo,
   traceEntry,
 } from "./siwc-demo";
 
@@ -25,6 +26,31 @@ describe("SIWC demo safety helpers", () => {
     expect(normalizeReturnTo("/docs?tab=siwc")).toBe("/docs?tab=siwc");
     expect(normalizeReturnTo("https://attacker.example/path")).toBe("/");
     expect(normalizeReturnTo("//attacker.example/path")).toBe("/");
+  });
+
+  it.each([
+    "/\\evil.example/proof",
+    "/\\\\evil.example/proof",
+    "/%5Cevil.example/proof",
+    "/%5C%5Cevil.example/proof",
+    "/%255Cevil.example/proof",
+    "/%2F%2Fevil.example/proof",
+  ])("rejects authority-like encoded and decoded return path %s", (value) => {
+    expect(normalizeReturnTo(value)).toBe("/");
+    expect(
+      resolveLocalReturnTo(value, "http://localhost:3000").origin
+    ).toBe("http://localhost:3000");
+  });
+
+  it("preserves a safe local path, query, and fragment", () => {
+    const resolved = resolveLocalReturnTo(
+      "/docs/siwc?tab=callback&next=%2Faccount#trace",
+      "http://localhost:3000"
+    );
+
+    expect(resolved.href).toBe(
+      "http://localhost:3000/docs/siwc?tab=callback&next=%2Faccount#trace"
+    );
   });
 
   it("redacts secrets and PII recursively without hiding protocol facts", () => {
