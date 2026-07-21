@@ -57,15 +57,18 @@ export async function GET(request: NextRequest) {
       redirectUri: transaction.redirectUri,
       tokenEndpoint: discovery.token_endpoint,
     });
-    const idTokenClaims = tokenResponse.idToken
-      ? await validateCubidIdToken({
-          clientId: config.clientId,
-          discoveryDocument: discovery,
-          idToken: tokenResponse.idToken,
-        })
-      : null;
 
-    if (tokenResponse.idToken && idTokenClaims?.nonce !== transaction.nonce) {
+    if (!tokenResponse.idToken) {
+      return redirectWithError(request, returnTo, "missing_id_token");
+    }
+
+    const idTokenClaims = await validateCubidIdToken({
+      clientId: config.clientId,
+      discoveryDocument: discovery,
+      idToken: tokenResponse.idToken,
+    });
+
+    if (idTokenClaims.nonce !== transaction.nonce) {
       return redirectWithError(request, returnTo, "nonce_mismatch");
     }
 

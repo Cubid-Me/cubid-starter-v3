@@ -170,4 +170,48 @@ describe("SIWC route guards", () => {
     expect(serializedHeaders).not.toContain("private-verifier");
     expect(serializedHeaders).not.toContain("expected-nonce");
   });
+
+  it("rejects an OAuth-only callback response without an ID token", async () => {
+    vi.spyOn(cubidAuth, "fetchCubidOidcDiscoveryDocument").mockResolvedValue({
+      authorization_endpoint: "https://id.cubid.me/authorize",
+      issuer: "https://id.cubid.me",
+      jwks_uri: "https://id.cubid.me/.well-known/jwks.json",
+      token_endpoint: "https://id.cubid.me/token",
+    });
+    vi.spyOn(cubidAuth, "exchangeCubidAuthorizationCode").mockResolvedValue({
+      accessToken: "private-access-token",
+      expiresAt: 1_800_000_000,
+      expiresIn: 600,
+      idToken: null,
+      issuedAt: 1_799_999_400,
+      raw: {},
+      refreshToken: null,
+      scope: ["profile"],
+      tokenType: "Bearer",
+    });
+    const validateIdToken = vi.spyOn(cubidAuth, "validateCubidIdToken");
+    const transaction = Buffer.from(
+      JSON.stringify({
+        codeVerifier: "private-verifier",
+        issuer: "https://id.cubid.me",
+        nonce: "expected-nonce",
+        redirectUri: "http://localhost:3000/api/cubid/siwc/callback",
+        state: "expected-state",
+      })
+    ).toString("base64url");
+    const request = new NextRequest(
+      "http://localhost:3000/api/cubid/siwc/callback?code=private-code&state=expected-state",
+      {
+        headers: {
+          cookie: `cubid_siwc_txn=${transaction}`,
+        },
+      }
+    );
+
+    const response = await callback(request);
+    const location = new URL(response.headers.get("location")!);
+
+    expect(location.searchParams.get("siwc_error")).toBe("missing_id_token");
+    expect(validateIdToken).not.toHaveBeenCalled();
+  });
 });

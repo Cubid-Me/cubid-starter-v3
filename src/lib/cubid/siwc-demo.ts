@@ -174,7 +174,7 @@ export function setSessionCookie(
 ) {
   response.cookies.set(
     siwcDemoCookies.session,
-    encodeCookiePayload(session),
+    encodeCookiePayload(sanitizeSiwcDemoSession(session)),
     {
       httpOnly: true,
       maxAge: sessionMaxAgeSeconds,
@@ -183,6 +183,12 @@ export function setSessionCookie(
       secure: request.nextUrl.protocol === "https:",
     }
   );
+}
+
+export function sanitizeSiwcDemoSession(
+  session: SiwcDemoSession
+): SiwcDemoSession {
+  return redactSiwcDemoValue(session) as SiwcDemoSession;
 }
 
 export function setTraceCookie(

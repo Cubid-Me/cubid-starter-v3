@@ -71,3 +71,12 @@
 - Summary: Fixed the STARTER-01 validator's callback open-redirect reproduction by strictly rejecting raw, encoded, and repeatedly encoded authority-like slash/backslash paths and resolving every accepted return target against the exact request origin.
 - Validation: `pnpm test` (22 passed); `pnpm lint`; `pnpm typecheck`; `pnpm build`; `git diff --check`; built server on port 3210 returned same-origin `http://localhost:3210/?siwc_error=missing_config` for `/\\evil.example/proof`, `/%5Cevil.example/proof`, `/%5C%5Cevil.example/proof`, `//evil.example/proof`, and `/%2F%2Fevil.example/proof`, while preserving `/docs/siwc?tab=callback` locally.
 - Follow-ups: Re-run independent validation on the new fix commit before moving STARTER-01 to In Review. STARTER-02 remains out of scope; do not merge or deploy from this task.
+
+## 2026-07-21T02:42:10Z
+
+- Agent: Codex issue-implementer
+- Branch: codex/siwc-demo-todos
+- Head: 467679d
+- Summary: Addressed the remaining actionable PR review feedback for STARTER-01 by requiring an ID token and nonce proof before session creation and redacting direct PII and nonce values before the recoverable HttpOnly demo-session cookie payload is serialized.
+- Validation: `pnpm test` (24 passed); `pnpm lint`; `pnpm typecheck`; `pnpm build`; `git diff --check`; focused coverage proves OAuth-only token responses fail with `missing_id_token` and decoded session-cookie payloads do not contain raw email, name, or nonce values.
+- Follow-ups: Re-run independent validation on the final fix stack before moving STARTER-01 to In Review. STARTER-02 remains out of scope; do not merge or deploy from this task.

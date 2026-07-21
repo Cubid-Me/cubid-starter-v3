@@ -6,6 +6,7 @@ import {
   normalizeReturnTo,
   redactSiwcDemoValue,
   resolveLocalReturnTo,
+  sanitizeSiwcDemoSession,
   traceEntry,
 } from "./siwc-demo";
 
@@ -112,5 +113,38 @@ describe("SIWC demo safety helpers", () => {
     expect(serialized).not.toContain("raw-nonce");
     expect(serialized).not.toContain("person@example.com");
     expect(serialized).toContain("pairwise-subject");
+  });
+
+  it("redacts PII and nonce before serializing the demo session cookie", () => {
+    const safe = sanitizeSiwcDemoSession({
+      authenticatedAt: "2026-07-20T00:00:00.000Z",
+      claims: {
+        email: "person@example.com",
+        name: "Private Person",
+        nonce: "private-nonce",
+        sub: "pairwise-subject",
+      },
+      clientId: "starter",
+      expiresAt: 1_800_000_000,
+      issuer: "https://id.cubid.me",
+      scope: ["openid", "profile", "email"],
+      subject: "pairwise-subject",
+      userInfo: {
+        email: "person@example.com",
+        name: "Private Person",
+        sub: "pairwise-subject",
+      },
+    });
+    const recoverableCookiePayload = Buffer.from(
+      Buffer.from(JSON.stringify(safe)).toString("base64url"),
+      "base64url"
+    ).toString("utf8");
+
+    expect(recoverableCookiePayload).not.toContain("person@example.com");
+    expect(recoverableCookiePayload).not.toContain("Private Person");
+    expect(recoverableCookiePayload).not.toContain("private-nonce");
+    expect(recoverableCookiePayload).toContain("pairwise-subject");
+    expect(safe.claims?.email).toBe("[redacted]");
+    expect(safe.userInfo?.email).toBe("[redacted]");
   });
 });
