@@ -31,7 +31,7 @@ out of browser env vars and client bundles.
 ## Copy-Paste Local Setup
 
 ```sh
-cd /Users/botmaster/src/cubid/cubid-starter-v3
+cd /Volumes/MiniBot/src/cubid/cubid-starter-v3
 cp .env.example .env.local
 pnpm install
 pnpm dev
@@ -54,7 +54,7 @@ NEXT_PUBLIC_CUBID_PASSPORT_BASE_URL=https://passport.cubid.me
 NEXT_PUBLIC_CUBID_CLEARPASS_PAGE_ID=your-clearpass-page-id
 ```
 
-Server-only values are read only by `src/app/api/cubid/server-demo/route.ts`:
+Server-only values are read by the starter's API routes:
 
 ```sh
 CUBID_API_BASE_URL=https://passport.cubid.me
@@ -64,6 +64,8 @@ CUBID_SIWC_ISSUER_URL=https://id.cubid.me
 CUBID_SIWC_CLIENT_ID=your-oidc-client-id
 CUBID_SIWC_REDIRECT_URI=http://localhost:3000/api/cubid/siwc/callback
 CUBID_SIWC_SCOPE="openid profile email"
+CUBID_SIWC_COOKIE_SECRET=your-random-cookie-encryption-key
+CUBID_SIWC_LOGIN_BASE_URL=https://login.cubid.me
 ```
 
 Never rename server credentials to `NEXT_PUBLIC_*`. The starter intentionally
@@ -145,15 +147,42 @@ Create or configure your dapp API credentials with:
 
 ## Package Source
 
-Most `@cubid/*` packages are published on npm. This checkout is also wired as a
-small pnpm workspace that links the current local SDK packages from:
+All `@cubid/*` dependencies use published npm versions. Installation does not
+require a sibling SDK checkout or access to Cubid infrastructure repositories.
 
-```txt
-/Users/botmaster/src/cubid/cubid-sdk-v2/packages/*
-```
+## SIWC Panel
 
-That keeps the starter aligned with the canonical SDK source while package
-publishing catches up, especially for `@cubid/comms`.
+The independent Sign in with Cubid panel starts at **Not signed in yet** and
+shows **Successfully signed in** after the verified callback. It does not gate
+the rest of the starter. Set `CUBID_SIWC_ISSUER_URL` and
+`CUBID_SIWC_CLIENT_ID`, then register the exact callback URI
+`http://localhost:3000/api/cubid/siwc/callback` in
+[Cubid Admin](https://admin.cubid.me/). No dapp API key or ClearPass configuration
+is needed for this panel. `CUBID_SIWC_REDIRECT_URI` defaults to the request
+origin plus that callback path; set it explicitly for hosted deployments.
+
+`CUBID_SIWC_SCOPE` defaults to `openid profile email`. Generate a server-only
+cookie key with `openssl rand -hex 32` and set `CUBID_SIWC_COOKIE_SECRET` to the
+result. It is required in production; development uses a temporary process key
+when unset. Keep the same key across server instances. Cookies contain encrypted,
+authenticated data, expire within 30 minutes (10 minutes for PKCE transactions),
+and contain no access, refresh, or ID tokens. Changing the key invalidates them.
+This short-lived demo session is not a replacement for application session management.
+
+The panel displays the starter session request and ordered discovery,
+authorization, callback, token, userinfo, and logout traces. Sensitive values
+are redacted. Traces are size-bounded; oldest entries may be removed for large
+responses. Start failures remain in the panel, and callback failures return
+there with a safe error code. Clear starter session resets the local demo;
+the Cubid SSO session can remain active.
+
+Cubid hosts passkeys, consent, device handoff, and recovery on its Login origin.
+Those internal calls are outside the starter's origin and are not observable
+here. The authorize and token endpoints always come from issuer discovery.
+The optional **Check deployment** action calls the public Login `/api/health`
+endpoint through a starter API route with a five-second timeout. Set
+`CUBID_SIWC_LOGIN_BASE_URL` to change that diagnostic target (default
+`https://login.cubid.me`); its availability does not block sign-in.
 
 ## Validation
 

@@ -1,13 +1,5 @@
 packages:
   - .
-  - ../cubid-sdk-v2/packages/auth
-  - ../cubid-sdk-v2/packages/auth-react
-  - ../cubid-sdk-v2/packages/browser
-  - ../cubid-sdk-v2/packages/comms
-  - ../cubid-sdk-v2/packages/core
-  - ../cubid-sdk-v2/packages/react
-  - ../cubid-sdk-v2/packages/wallet-recovery
-  - ../cubid-sdk-v2/packages/wallet-recovery-react
 
 ignoredBuiltDependencies:
   - sharp

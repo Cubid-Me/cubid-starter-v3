@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         error: "missing_config",
         missing: config.missing,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -57,7 +57,13 @@ export async function GET(request: NextRequest) {
       scope: config.scope,
       state,
     });
-    const response = NextResponse.redirect(authorizationUrl);
+    const response =
+      request.nextUrl.searchParams.get("format") === "json"
+        ? NextResponse.json(
+            { authorizationUrl },
+            { headers: { "Cache-Control": "no-store" } },
+          )
+        : NextResponse.redirect(authorizationUrl);
 
     setTransactionCookie(response, request, {
       codeVerifier: pkce.codeVerifier,
@@ -69,13 +75,14 @@ export async function GET(request: NextRequest) {
     setReturnToCookie(
       response,
       request,
-      request.nextUrl.searchParams.get("return_to") ?? "/"
+      request.nextUrl.searchParams.get("return_to") ?? "/",
     );
     setTraceCookie(response, request, [
       traceEntry("discovery", "Fetch issuer discovery metadata", {
         request: {
           issuer: config.issuer,
           method: "GET",
+          url: `${config.issuer.replace(/\/$/u, "")}/.well-known/openid-configuration`,
         },
         response: {
           authorizationEndpoint: discovery.authorization_endpoint,
@@ -87,6 +94,8 @@ export async function GET(request: NextRequest) {
       }),
       traceEntry("authorization", "Redirect to Cubid authorization endpoint", {
         request: {
+          method: "GET",
+          url: discovery.authorization_endpoint,
           acrValues: "urn:cubid:acr:passkey",
           clientId: config.clientId,
           codeChallengeMethod: pkce.codeChallengeMethod,
@@ -98,6 +107,9 @@ export async function GET(request: NextRequest) {
           responseType: "code",
           scope: config.scope,
           statePresent: true,
+          parameters: Object.fromEntries(
+            new URL(authorizationUrl).searchParams,
+          ),
         },
         response: {
           redirectTo: discovery.authorization_endpoint,
@@ -113,7 +125,7 @@ export async function GET(request: NextRequest) {
         error: "siwc_start_failed",
         details: buildErrorPayload(error),
       },
-      { status: 502 }
+      { status: 502 },
     );
   }
 }

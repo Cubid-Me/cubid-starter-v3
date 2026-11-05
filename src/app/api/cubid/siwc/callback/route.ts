@@ -41,9 +41,11 @@ export async function GET(request: NextRequest) {
 
     const callback = parseCubidAuthorizationCallback(request.nextUrl);
     assertCubidAuthorizationState(transaction.state, callback);
-
     if (callback.kind === "error") {
       return redirectWithError(request, returnTo, callback.error);
+    }
+    if (callback.iss && callback.iss !== transaction.issuer) {
+      return redirectWithError(request, returnTo, "callback_issuer_mismatch");
     }
 
     const discovery = await fetchCubidOidcDiscoveryDocument({
@@ -86,9 +88,14 @@ export async function GET(request: NextRequest) {
       tokenResponse,
       userInfo,
     });
+    if (userInfo && userInfo.sub !== idTokenClaims.sub) {
+      return redirectWithError(request, returnTo, "userinfo_subject_mismatch");
+    }
     const response = NextResponse.redirect(
-      resolveLocalReturnTo(returnTo, request.nextUrl.origin)
+      resolveLocalReturnTo(returnTo, request.nextUrl.origin),
     );
+    response.headers.set("Cache-Control", "no-store");
+    response.headers.set("Referrer-Policy", "no-referrer");
 
     setSessionCookie(response, request, {
       authenticatedAt: new Date().toISOString(),
@@ -103,6 +110,8 @@ export async function GET(request: NextRequest) {
     appendTrace(request, response, [
       traceEntry("callback", "Receive Cubid callback", {
         request: {
+          method: "GET",
+          url: transaction.redirectUri,
           codePresent: true,
           issuer: callback.iss,
           sessionStatePresent: Boolean(callback.sessionState),
@@ -111,6 +120,15 @@ export async function GET(request: NextRequest) {
       }),
       traceEntry("token", "Exchange authorization code server-side", {
         request: {
+          method: "POST",
+          contentType: "application/x-www-form-urlencoded",
+          body: {
+            client_id: config.clientId,
+            code: "[redacted]",
+            code_verifier: "[redacted]",
+            grant_type: "authorization_code",
+            redirect_uri: transaction.redirectUri,
+          },
           clientId: config.clientId,
           codePresent: true,
           codeVerifierPresent: true,
@@ -128,17 +146,35 @@ export async function GET(request: NextRequest) {
           tokenType: tokenResponse.tokenType,
         },
       }),
-      traceEntry("userinfo", "Fetch userinfo with server-side access token", {
-        request: {
-          accessToken: tokenResponse.accessToken ? "[redacted]" : null,
-          userInfoEndpoint: discovery.userinfo_endpoint ?? null,
-        },
+      traceEntry("id_token", "Verify ID token using issuer signing keys", {
+        request: { method: "GET", url: discovery.jwks_uri },
         response: {
-          enabled: Boolean(discovery.userinfo_endpoint),
-          subject: userInfo?.sub ?? null,
-          userInfo,
+          signatureVerified: true,
+          issuerVerified: true,
+          audienceVerified: true,
+          nonceMatched: true,
+          claims: idTokenClaims,
         },
       }),
+      traceEntry(
+        "userinfo",
+        userInfo
+          ? "Fetch userinfo with server-side access token"
+          : "Skip userinfo (not available)",
+        {
+          request: {
+            method: "GET",
+            skipped: !userInfo,
+            accessToken: tokenResponse.accessToken ? "[redacted]" : null,
+            userInfoEndpoint: discovery.userinfo_endpoint ?? null,
+          },
+          response: {
+            enabled: Boolean(discovery.userinfo_endpoint),
+            subject: userInfo?.sub ?? null,
+            userInfo,
+          },
+        },
+      ),
       traceEntry("session", "Create starter demo session", {
         response: {
           authenticated: true,
@@ -159,24 +195,29 @@ export async function GET(request: NextRequest) {
       returnTo,
       "code" in errorPayload && typeof errorPayload.code === "string"
         ? errorPayload.code
-        : "callback_failed"
+        : "callback_failed",
     );
-    response.cookies.set("cubid_siwc_last_error", JSON.stringify(errorPayload), {
-      httpOnly: true,
-      maxAge: 60,
-      path: "/",
-      sameSite: "lax",
-      secure: request.nextUrl.protocol === "https:",
-    });
-
     return response;
   }
 }
 
-function redirectWithError(request: NextRequest, returnTo: string, error: string) {
+function redirectWithError(
+  request: NextRequest,
+  returnTo: string,
+  error: string,
+) {
   const url = resolveLocalReturnTo(returnTo, request.nextUrl.origin);
   url.searchParams.set("siwc_error", error);
   const response = NextResponse.redirect(url);
+  response.headers.set("Cache-Control", "no-store");
+  response.headers.set("Referrer-Policy", "no-referrer");
+  if (getSiwcDemoConfig(request).configured)
+    appendTrace(request, response, [
+      traceEntry("error", "Authorization callback failed", {
+        request: { method: "GET", url: "/api/cubid/siwc/callback" },
+        response: { error },
+      }),
+    ]);
   clearSiwcDemoTransaction(response);
   return response;
 }
