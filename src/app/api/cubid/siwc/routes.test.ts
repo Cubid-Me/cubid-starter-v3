@@ -1,9 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import * as cubidAuth from "@cubid/auth";
 
 import { GET as callback } from "./callback/route";
 import { GET as start } from "./start/route";
+import { GET as session } from "./session/route";
+import { POST as logout } from "./logout/route";
+import { setTransactionCookie } from "@/lib/cubid/siwc-demo";
+import {
+  handleSiwcCallback,
+  type SiwcCallbackOptions,
+} from "@/lib/cubid/siwc-callback";
+
+vi.mock("@cubid/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@cubid/auth")>()),
+}));
+
+function transactionValue(state = "expected-state", nonce = "expected-nonce") {
+  const response = NextResponse.json({});
+  setTransactionCookie(response, new NextRequest("http://localhost:3000"), {
+    codeVerifier: "private-verifier",
+    issuer: "https://id.cubid.me",
+    nonce,
+    redirectUri: "http://localhost:3000/api/cubid/siwc/callback",
+    state,
+  });
+  return response.cookies.get("cubid_siwc_txn")!.value;
+}
 
 const originalEnv = { ...process.env };
 
@@ -20,12 +43,236 @@ afterEach(() => {
 });
 
 describe("SIWC route guards", () => {
+  it.each([
+    {
+      onAuthenticated: async () => ({ accountId: "a".repeat(129) }),
+      code: "invalid_app_summary",
+    },
+    {
+      onAuthenticated: async () => ({
+        accountId: "app_42",
+        privateData: "private-extra",
+      }),
+      code: "invalid_app_summary",
+    },
+    {
+      onAuthenticated: async () => {
+        throw new Error("private-mapper-error");
+      },
+      code: "account_mapping_failed",
+    },
+  ])(
+    "fails closed on $code without a demo session",
+    async ({ onAuthenticated, code }) => {
+      vi.spyOn(cubidAuth, "fetchCubidOidcDiscoveryDocument").mockResolvedValue({
+        authorization_endpoint: "https://id.cubid.me/authorize",
+        issuer: "https://id.cubid.me",
+        jwks_uri: "https://id.cubid.me/jwks",
+        token_endpoint: "https://id.cubid.me/token",
+      });
+      vi.spyOn(cubidAuth, "exchangeCubidAuthorizationCode").mockResolvedValue({
+        accessToken: "private-access",
+        idToken: "private-id",
+        refreshToken: null,
+        expiresAt: Date.now() + 600000,
+        expiresIn: 600,
+        issuedAt: Date.now(),
+        raw: {},
+        scope: ["openid"],
+        tokenType: "Bearer",
+      });
+      vi.spyOn(cubidAuth, "validateCubidIdToken").mockResolvedValue({
+        sub: "pairwise-subject",
+        nonce: "expected-nonce",
+        exp: Date.now() / 1000 + 600,
+      });
+      const response = await handleSiwcCallback(
+        new NextRequest(
+          "http://localhost:3000/api/cubid/siwc/callback?code=private-code&state=expected-state",
+          { headers: { cookie: `cubid_siwc_txn=${transactionValue()}` } },
+        ),
+        { onAuthenticated },
+      );
+      expect(response.headers.get("location")).toContain(`siwc_error=${code}`);
+      expect(response.cookies.get("cubid_siwc_demo_session")).toBeUndefined();
+      expect(JSON.stringify([...response.headers])).not.toContain("private-");
+    },
+  );
+
+  it("does not execute account mapping before state validation", async () => {
+    const onAuthenticated: NonNullable<SiwcCallbackOptions["onAuthenticated"]> =
+      vi.fn();
+    const response = await handleSiwcCallback(
+      new NextRequest(
+        "http://localhost:3000/api/cubid/siwc/callback?code=private-code&state=wrong-state",
+        { headers: { cookie: `cubid_siwc_txn=${transactionValue()}` } },
+      ),
+      { onAuthenticated },
+    );
+    expect(response.headers.get("location")).toContain("state_mismatch");
+    expect(onAuthenticated).not.toHaveBeenCalled();
+  });
+
+  it("isolates localhost cookies across ports and rejects cross-origin reset", async () => {
+    const set = NextResponse.json({});
+    setTransactionCookie(set, new NextRequest("http://localhost:3001"), {
+      codeVerifier: "private-verifier",
+      issuer: "https://id.cubid.me",
+      nonce: "expected-nonce",
+      redirectUri: "http://localhost:3001/api/cubid/siwc/callback",
+      state: "expected-state",
+    });
+    const cookies = set.cookies
+      .getAll()
+      .map(({ name, value }) => `${name}=${value}`)
+      .join("; ");
+    expect(cookies).toContain("cubid_siwc_txn_3001=");
+    const crossPort = await callback(
+      new NextRequest(
+        "http://localhost:3002/api/cubid/siwc/callback?code=x&state=expected-state",
+        { headers: { cookie: cookies } },
+      ),
+    );
+    expect(crossPort.headers.get("location")).toContain("missing_transaction");
+    const reset = await logout(
+      new NextRequest("http://localhost:3001/api/cubid/siwc/logout", {
+        method: "POST",
+        headers: { origin: "http://localhost:3002" },
+      }),
+    );
+    expect(reset.status).toBe(403);
+    expect(reset.cookies.getAll()).toEqual([]);
+  });
+  it("fails safely in production without a cookie key and still permits reset", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    delete process.env.CUBID_SIWC_COOKIE_SECRET;
+    try {
+      const response = await start(
+        new NextRequest("http://localhost:3000/api/cubid/siwc/start"),
+      );
+      expect(response.status).toBe(500);
+      expect((await response.json()).missing).toContain(
+        "CUBID_SIWC_COOKIE_SECRET (at least 32 random characters)",
+      );
+      const failed = await callback(
+        new NextRequest("http://localhost:3000/api/cubid/siwc/callback"),
+      );
+      expect(failed.headers.get("location")).toContain(
+        "siwc_error=missing_config",
+      );
+      expect(
+        (
+          await logout(
+            new NextRequest("http://localhost:3000/api/cubid/siwc/logout", {
+              method: "POST",
+            }),
+          )
+        ).status,
+      ).toBe(200);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("rejects forged session and transaction cookies", async () => {
+    const forged = Buffer.from(
+      JSON.stringify({ subject: "forged", expiresAt: Date.now() + 60000 }),
+    ).toString("base64url");
+    const result = await session(
+      new NextRequest("http://localhost:3000/api/cubid/siwc/session", {
+        headers: { cookie: `cubid_siwc_demo_session=${forged}` },
+      }),
+    );
+    expect((await result.json()).authenticated).toBe(false);
+    const response = await callback(
+      new NextRequest(
+        "http://localhost:3000/api/cubid/siwc/callback?code=x&state=y",
+        { headers: { cookie: `cubid_siwc_txn=${forged}` } },
+      ),
+    );
+    expect(response.headers.get("location")).toContain("missing_transaction");
+  });
+
+  it("completes start, callback and session with a redacted protocol trace", async () => {
+    vi.spyOn(cubidAuth, "fetchCubidOidcDiscoveryDocument").mockResolvedValue({
+      authorization_endpoint: "https://id.cubid.me/authorize",
+      issuer: "https://id.cubid.me",
+      jwks_uri: "https://id.cubid.me/jwks",
+      token_endpoint: "https://id.cubid.me/token",
+    });
+    vi.spyOn(cubidAuth, "exchangeCubidAuthorizationCode").mockImplementation(
+      async () => ({
+        accessToken: "private-access",
+        idToken: "private-id",
+        refreshToken: null,
+        expiresAt: Date.now() + 600000,
+        expiresIn: 600,
+        issuedAt: Date.now(),
+        raw: {},
+        scope: ["openid"],
+        tokenType: "Bearer",
+      }),
+    );
+    const started = await start(
+      new NextRequest("http://localhost:3000/api/cubid/siwc/start?format=json"),
+    );
+    const authorize = new URL((await started.json()).authorizationUrl);
+    vi.spyOn(cubidAuth, "validateCubidIdToken").mockResolvedValue({
+      iss: "https://id.cubid.me",
+      aud: "starter-client",
+      sub: "pairwise-subject",
+      nonce: authorize.searchParams.get("nonce")!,
+      exp: Math.floor(Date.now() / 1000) + 600,
+    });
+    const cookie = started.cookies
+      .getAll()
+      .map((c) => `${c.name}=${c.value}`)
+      .join("; ");
+    const onAuthenticated = vi.fn(async () => ({
+      accountId: "app_account_42",
+    }));
+    const completed = await handleSiwcCallback(
+      new NextRequest(
+        `http://localhost:3000/api/cubid/siwc/callback?code=private-code&state=${authorize.searchParams.get("state")}`,
+        { headers: { cookie } },
+      ),
+      { onAuthenticated },
+    );
+    expect(completed.headers.get("location")).toBe("http://localhost:3000/");
+    const result = await session(
+      new NextRequest("http://localhost:3000/api/cubid/siwc/session", {
+        headers: {
+          cookie: completed.cookies
+            .getAll()
+            .map((c) => `${c.name}=${c.value}`)
+            .join("; "),
+        },
+      }),
+    );
+    const payload = await result.json();
+    expect(payload.authenticated).toBe(true);
+    expect(payload.session.subject).toBe("pairwise-subject");
+    expect(payload.session.app).toEqual({ accountId: "app_account_42" });
+    expect(onAuthenticated).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ subject: "pairwise-subject" }),
+    );
+    expect(
+      payload.trace.map((entry: { step: string }) => entry.step),
+    ).toContain("authorization");
+    expect(
+      payload.trace.map((entry: { step: string }) => entry.step),
+    ).toContain("token");
+    expect(JSON.stringify(payload)).not.toContain("private-");
+    expect(
+      completed.cookies.get("cubid_siwc_trace")!.value.length,
+    ).toBeLessThan(3501);
+    expect(result.headers.get("cache-control")).toBe("no-store");
+  });
   it("fails safely when required start configuration is missing", async () => {
     delete process.env.CUBID_SIWC_CLIENT_ID;
     delete process.env.NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID;
 
     const response = await start(
-      new NextRequest("http://localhost:3000/api/cubid/siwc/start")
+      new NextRequest("http://localhost:3000/api/cubid/siwc/start"),
     );
 
     expect(response.status).toBe(500);
@@ -42,25 +289,28 @@ describe("SIWC route guards", () => {
     "/%255Cevil.example/proof",
     "//evil.example/proof",
     "/%2F%2Fevil.example/proof",
-  ])("keeps an unsafe callback return cookie same-origin: %s", async (returnTo) => {
-    delete process.env.CUBID_SIWC_CLIENT_ID;
-    delete process.env.NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID;
-    const request = new NextRequest(
-      "http://localhost:3000/api/cubid/siwc/callback?code=x&state=y",
-      {
-        headers: {
-          cookie: `cubid_siwc_return_to=${returnTo}`,
+  ])(
+    "keeps an unsafe callback return cookie same-origin: %s",
+    async (returnTo) => {
+      delete process.env.CUBID_SIWC_CLIENT_ID;
+      delete process.env.NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID;
+      const request = new NextRequest(
+        "http://localhost:3000/api/cubid/siwc/callback?code=x&state=y",
+        {
+          headers: {
+            cookie: `cubid_siwc_return_to=${returnTo}`,
+          },
         },
-      }
-    );
+      );
 
-    const response = await callback(request);
-    const location = new URL(response.headers.get("location")!);
+      const response = await callback(request);
+      const location = new URL(response.headers.get("location")!);
 
-    expect(location.origin).toBe("http://localhost:3000");
-    expect(location.pathname).toBe("/");
-    expect(location.searchParams.get("siwc_error")).toBe("missing_config");
-  });
+      expect(location.origin).toBe("http://localhost:3000");
+      expect(location.pathname).toBe("/");
+      expect(location.searchParams.get("siwc_error")).toBe("missing_config");
+    },
+  );
 
   it("preserves a safe callback return path and query", async () => {
     delete process.env.CUBID_SIWC_CLIENT_ID;
@@ -71,7 +321,7 @@ describe("SIWC route guards", () => {
         headers: {
           cookie: "cubid_siwc_return_to=/docs/siwc?tab=callback",
         },
-      }
+      },
     );
 
     const response = await callback(request);
@@ -84,22 +334,14 @@ describe("SIWC route guards", () => {
   });
 
   it("rejects a callback with mismatched state before token exchange", async () => {
-    const transaction = Buffer.from(
-      JSON.stringify({
-        codeVerifier: "private-verifier",
-        issuer: "https://id.cubid.me",
-        nonce: "private-nonce",
-        redirectUri: "http://localhost:3000/api/cubid/siwc/callback",
-        state: "expected-state",
-      })
-    ).toString("base64url");
+    const transaction = transactionValue("expected-state", "private-nonce");
     const request = new NextRequest(
       "http://localhost:3000/api/cubid/siwc/callback?code=private-code&state=wrong-state",
       {
         headers: {
           cookie: `cubid_siwc_txn=${transaction}`,
         },
-      }
+      },
     );
 
     const response = await callback(request);
@@ -113,7 +355,7 @@ describe("SIWC route guards", () => {
     expect(serializedHeaders).not.toContain("expected-state");
     expect(response.headers.get("set-cookie")).toContain("cubid_siwc_txn=");
     expect(response.headers.get("set-cookie")).toContain(
-      "Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
     );
   });
 
@@ -142,22 +384,14 @@ describe("SIWC route guards", () => {
       nonce: "wrong-nonce",
       sub: "pairwise-subject",
     });
-    const transaction = Buffer.from(
-      JSON.stringify({
-        codeVerifier: "private-verifier",
-        issuer: "https://id.cubid.me",
-        nonce: "expected-nonce",
-        redirectUri: "http://localhost:3000/api/cubid/siwc/callback",
-        state: "expected-state",
-      })
-    ).toString("base64url");
+    const transaction = transactionValue();
     const request = new NextRequest(
       "http://localhost:3000/api/cubid/siwc/callback?code=private-code&state=expected-state",
       {
         headers: {
           cookie: `cubid_siwc_txn=${transaction}`,
         },
-      }
+      },
     );
 
     const response = await callback(request);
@@ -190,22 +424,14 @@ describe("SIWC route guards", () => {
       tokenType: "Bearer",
     });
     const validateIdToken = vi.spyOn(cubidAuth, "validateCubidIdToken");
-    const transaction = Buffer.from(
-      JSON.stringify({
-        codeVerifier: "private-verifier",
-        issuer: "https://id.cubid.me",
-        nonce: "expected-nonce",
-        redirectUri: "http://localhost:3000/api/cubid/siwc/callback",
-        state: "expected-state",
-      })
-    ).toString("base64url");
+    const transaction = transactionValue();
     const request = new NextRequest(
       "http://localhost:3000/api/cubid/siwc/callback?code=private-code&state=expected-state",
       {
         headers: {
           cookie: `cubid_siwc_txn=${transaction}`,
         },
-      }
+      },
     );
 
     const response = await callback(request);
