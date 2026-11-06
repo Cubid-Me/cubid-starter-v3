@@ -11,7 +11,8 @@ const requiredEnv = [
     name: "NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID",
     scope: "Browser-safe",
     usedFor: "Browser sign-in launch and callback handling.",
-    source: "Create or copy the OIDC client id in Cubid Admin.",
+    source:
+      "Register a public client through the issuer's POST registration endpoint.",
   },
   {
     name: "NEXT_PUBLIC_CUBID_REDIRECT_URI",
@@ -35,7 +36,8 @@ const requiredEnv = [
     name: "CUBID_SIWC_CLIENT_ID",
     scope: "Server-only",
     usedFor: "Server-mediated authorization and code exchange.",
-    source: "Copy the registered relying-party client id from Cubid Admin.",
+    source:
+      "Use the client_id returned by issuer registration. See the README.",
   },
   {
     name: "CUBID_SIWC_REDIRECT_URI",
