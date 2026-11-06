@@ -18,6 +18,15 @@ export const siwcDemoCookies = {
   transaction: "cubid_siwc_txn",
 } as const;
 
+// Cookie scope ignores ports, so keep localhost instances isolated.
+function cookieName(
+  request: NextRequest,
+  key: keyof typeof siwcDemoCookies,
+): string {
+  const port = request.nextUrl.port;
+  return siwcDemoCookies[key] + (port && port !== "3000" ? `_${port}` : "");
+}
+
 const transactionMaxAgeSeconds = 10 * 60;
 const sessionMaxAgeSeconds = 30 * 60;
 // Development sessions intentionally expire when this server process restarts.
@@ -45,6 +54,7 @@ const sensitiveBrowserKeys = new Set([
   "birthdate",
   "code",
   "code_verifier",
+  "code_challenge",
   "codeVerifier",
   "cookie",
   "cookies",
@@ -72,6 +82,7 @@ export type SiwcDemoTransaction = {
 };
 
 export type SiwcDemoSession = {
+  app?: { accountId: string };
   authenticatedAt: string;
   claims: CubidIdTokenClaims | null;
   clientId: string;
@@ -103,10 +114,24 @@ export type SiwcDemoConfig =
       scope: string[];
     };
 
-type CookieOptions = {
-  maxAge: number;
-  secure: boolean;
-};
+export function getSiwcRequestOrigin(request: NextRequest): string {
+  const { hostname, port, protocol, origin } = request.nextUrl;
+  const host = request.headers.get("host");
+  // NextURL normalizes loopback addresses to localhost. Cookies do not.
+  if (
+    hostname === "localhost" &&
+    host &&
+    /^(?:127\.\d+\.\d+\.\d+|\[::1\])(?::\d+)?$/u.test(host)
+  ) {
+    try {
+      const loopback = new URL(`${protocol}//${host}`);
+      if (loopback.port === port) return loopback.origin;
+    } catch {
+      return origin;
+    }
+  }
+  return origin;
+}
 
 export function getSiwcDemoConfig(request: NextRequest): SiwcDemoConfig {
   const issuer =
@@ -117,7 +142,7 @@ export function getSiwcDemoConfig(request: NextRequest): SiwcDemoConfig {
     process.env.NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID;
   const redirectUri =
     process.env.CUBID_SIWC_REDIRECT_URI ??
-    `${request.nextUrl.origin}/api/cubid/siwc/callback`;
+    `${getSiwcRequestOrigin(request)}/api/cubid/siwc/callback`;
   const scope = (process.env.CUBID_SIWC_SCOPE ?? "openid profile email")
     .split(/\s+/u)
     .filter(Boolean);
@@ -152,23 +177,16 @@ export function getSiwcDemoConfig(request: NextRequest): SiwcDemoConfig {
   };
 }
 
-export function getCookieOptions(request: NextRequest): CookieOptions {
-  return {
-    maxAge: sessionMaxAgeSeconds,
-    secure: request.nextUrl.protocol === "https:",
-  };
-}
-
 export function setTransactionCookie(
   response: NextResponse,
   request: NextRequest,
   transaction: SiwcDemoTransaction,
 ) {
   response.cookies.set(
-    siwcDemoCookies.transaction,
+    cookieName(request, "transaction"),
     encodeCookiePayload(
       transaction,
-      siwcDemoCookies.transaction,
+      cookieName(request, "transaction"),
       transactionMaxAgeSeconds,
     ),
     {
@@ -186,13 +204,17 @@ export function setReturnToCookie(
   request: NextRequest,
   returnTo: string,
 ) {
-  response.cookies.set(siwcDemoCookies.returnTo, normalizeReturnTo(returnTo), {
-    httpOnly: true,
-    maxAge: transactionMaxAgeSeconds,
-    path: "/",
-    sameSite: "lax",
-    secure: request.nextUrl.protocol === "https:",
-  });
+  response.cookies.set(
+    cookieName(request, "returnTo"),
+    normalizeReturnTo(returnTo),
+    {
+      httpOnly: true,
+      maxAge: transactionMaxAgeSeconds,
+      path: "/",
+      sameSite: "lax",
+      secure: request.nextUrl.protocol === "https:",
+    },
+  );
 }
 
 export function setSessionCookie(
@@ -200,21 +222,32 @@ export function setSessionCookie(
   request: NextRequest,
   session: SiwcDemoSession,
 ) {
-  response.cookies.set(
-    siwcDemoCookies.session,
-    encodeCookiePayload(
-      sanitizeSiwcDemoSession(session),
-      siwcDemoCookies.session,
-      sessionMaxAgeSeconds,
+  const name = cookieName(request, "session");
+  const summary = sanitizeSiwcDemoSession({
+    ...session,
+    expiresAt: Math.min(
+      Date.now() + sessionMaxAgeSeconds * 1000,
+      session.expiresAt ?? Infinity,
+      (session.claims?.exp ?? Infinity) * 1000,
     ),
-    {
-      httpOnly: true,
-      maxAge: sessionMaxAgeSeconds,
-      path: "/",
-      sameSite: "lax",
-      secure: request.nextUrl.protocol === "https:",
-    },
-  );
+  });
+  let encoded = encodeCookiePayload(summary, name, sessionMaxAgeSeconds);
+  if (encoded.length > 3500) {
+    encoded = encodeCookiePayload(
+      { ...summary, claims: null, userInfo: null },
+      name,
+      sessionMaxAgeSeconds,
+    );
+  }
+  if (encoded.length > 3500)
+    throw new Error("SIWC session exceeds the cookie size limit");
+  response.cookies.set(name, encoded, {
+    httpOnly: true,
+    maxAge: sessionMaxAgeSeconds,
+    path: "/",
+    sameSite: "lax",
+    secure: request.nextUrl.protocol === "https:",
+  });
 }
 
 export function sanitizeSiwcDemoSession(
@@ -232,13 +265,20 @@ export function setTraceCookie(
   const bounded = redactSiwcDemoValue(trace.slice(-12)) as SiwcDemoTraceEntry[];
   while (
     bounded.length &&
-    encodeCookiePayload(bounded, siwcDemoCookies.trace, sessionMaxAgeSeconds)
-      .length > 3500
+    encodeCookiePayload(
+      bounded,
+      cookieName(request, "trace"),
+      sessionMaxAgeSeconds,
+    ).length > 3500
   )
     bounded.shift();
   response.cookies.set(
-    siwcDemoCookies.trace,
-    encodeCookiePayload(bounded, siwcDemoCookies.trace, sessionMaxAgeSeconds),
+    cookieName(request, "trace"),
+    encodeCookiePayload(
+      bounded,
+      cookieName(request, "trace"),
+      sessionMaxAgeSeconds,
+    ),
     {
       httpOnly: true,
       maxAge: sessionMaxAgeSeconds,
@@ -253,8 +293,8 @@ export function readTransactionCookie(
   request: NextRequest,
 ): SiwcDemoTransaction | null {
   return readCookiePayload<SiwcDemoTransaction>(
-    request.cookies.get(siwcDemoCookies.transaction)?.value,
-    siwcDemoCookies.transaction,
+    request.cookies.get(cookieName(request, "transaction"))?.value,
+    cookieName(request, "transaction"),
   );
 }
 
@@ -262,33 +302,39 @@ export function readSessionCookie(
   request: NextRequest,
 ): SiwcDemoSession | null {
   return readCookiePayload<SiwcDemoSession>(
-    request.cookies.get(siwcDemoCookies.session)?.value,
-    siwcDemoCookies.session,
+    request.cookies.get(cookieName(request, "session"))?.value,
+    cookieName(request, "session"),
   );
 }
 
 export function readTraceCookie(request: NextRequest): SiwcDemoTraceEntry[] {
   return (
     readCookiePayload<SiwcDemoTraceEntry[]>(
-      request.cookies.get(siwcDemoCookies.trace)?.value,
-      siwcDemoCookies.trace,
+      request.cookies.get(cookieName(request, "trace"))?.value,
+      cookieName(request, "trace"),
     ) ?? []
   );
 }
 
 export function readReturnToCookie(request: NextRequest): string {
   return normalizeReturnTo(
-    request.cookies.get(siwcDemoCookies.returnTo)?.value ?? "/",
+    request.cookies.get(cookieName(request, "returnTo"))?.value ?? "/",
   );
 }
 
-export function clearSiwcDemoTransaction(response: NextResponse) {
-  response.cookies.delete(siwcDemoCookies.transaction);
-  response.cookies.delete(siwcDemoCookies.returnTo);
+export function clearSiwcDemoTransaction(
+  response: NextResponse,
+  request: NextRequest,
+) {
+  response.cookies.delete(cookieName(request, "transaction"));
+  response.cookies.delete(cookieName(request, "returnTo"));
 }
 
-export function clearSiwcDemoSession(response: NextResponse) {
-  response.cookies.delete(siwcDemoCookies.session);
+export function clearSiwcDemoSession(
+  response: NextResponse,
+  request: NextRequest,
+) {
+  response.cookies.delete(cookieName(request, "session"));
 }
 
 export function appendTrace(
@@ -333,6 +379,7 @@ export function buildSessionSummary(
   return {
     authenticated: true,
     session: {
+      app: session.app,
       authenticatedAt: session.authenticatedAt,
       claims: redactSiwcDemoValue(session.claims),
       clientId: session.clientId,

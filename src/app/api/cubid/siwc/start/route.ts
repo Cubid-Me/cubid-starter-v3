@@ -8,7 +8,6 @@ import {
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-  buildErrorPayload,
   assertSiwcDiscoveryIssuer,
   getSiwcDemoConfig,
   setReturnToCookie,
@@ -28,7 +27,7 @@ export async function GET(request: NextRequest) {
         error: "missing_config",
         missing: config.missing,
       },
-      { status: 500 },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
     );
   }
 
@@ -63,7 +62,9 @@ export async function GET(request: NextRequest) {
             { authorizationUrl },
             { headers: { "Cache-Control": "no-store" } },
           )
-        : NextResponse.redirect(authorizationUrl);
+        : NextResponse.redirect(authorizationUrl, {
+            headers: { "Cache-Control": "no-store" },
+          });
 
     setTransactionCookie(response, request, {
       codeVerifier: pkce.codeVerifier,
@@ -113,19 +114,18 @@ export async function GET(request: NextRequest) {
         },
         response: {
           redirectTo: discovery.authorization_endpoint,
-          status: 307,
+          status: response.status,
         },
       }),
     ]);
 
     return response;
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       {
         error: "siwc_start_failed",
-        details: buildErrorPayload(error),
       },
-      { status: 502 },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
 }

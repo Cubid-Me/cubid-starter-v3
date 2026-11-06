@@ -5,11 +5,19 @@ import {
   clearSiwcDemoSession,
   traceEntry,
   getSiwcDemoConfig,
+  getSiwcRequestOrigin,
 } from "@/lib/cubid/siwc-demo";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== getSiwcRequestOrigin(request)) {
+    return NextResponse.json(
+      { error: "origin_mismatch" },
+      { status: 403, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   const response = NextResponse.json(
     {
       cleared: true,
@@ -17,7 +25,7 @@ export async function POST(request: NextRequest) {
     },
     { headers: { "Cache-Control": "no-store" } },
   );
-  clearSiwcDemoSession(response);
+  clearSiwcDemoSession(response, request);
   if (getSiwcDemoConfig(request).configured)
     appendTrace(request, response, [
       traceEntry("logout", "Clear starter demo session only", {

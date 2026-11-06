@@ -6,7 +6,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { BrowserDemo, ServerMediatedSiwcPanel } from "@/components/cubid/browser-demo";
+import { BrowserDemo } from "@/components/cubid/browser-demo";
+import { ServerMediatedSiwcPanel } from "@/components/cubid/siwc-panel";
 import { EnvReferencePanel } from "@/components/cubid/env-reference-panel";
 import { ServerDemo } from "@/components/cubid/server-demo";
 
@@ -49,10 +50,10 @@ export default function Home() {
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-[#485244]">
               This starter demonstrates the modern `@cubid/*` package family
-              from `Cubid-Me/cubid-sdk`. Server calls use dapp credentials
-              only on API routes. Browser flows use OIDC PKCE, hosted
-              verification, notification preferences, and recoverable-wallet
-              launchers without exposing server secrets.
+              from `Cubid-Me/cubid-sdk`. Server calls use dapp credentials only
+              on API routes. Browser flows use OIDC PKCE, hosted verification,
+              notification preferences, and recoverable-wallet launchers without
+              exposing server secrets.
             </p>
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
               {capabilities.map((item) => {
