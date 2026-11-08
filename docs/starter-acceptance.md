@@ -33,6 +33,7 @@ behavior should agree. Use the published SDK for protocol primitives.
    Mark this gate pending if the user or hosted callback is unavailable.
    A loopback issuer pass never substitutes for this gate.
 
-The Next.js checkout has previously reached hosted Login with its
-registered localhost client. The authenticator timed out before callback;
-hosted release acceptance remains pending until a user completes it.
+The Next.js starter passed this gate on the protected HTTPS `dev`
+preview on 2026-11-08. See the [hosted SIWC session log](../agent-context/session-log/2026-11-08-hosted-siwc-acceptance.md)
+for the tested commit, exact callback and observed outcomes. This is
+preview acceptance, not verification of a production deployment.
