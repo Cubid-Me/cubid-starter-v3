@@ -11,7 +11,8 @@ const requiredEnv = [
     name: "NEXT_PUBLIC_CUBID_OIDC_CLIENT_ID",
     scope: "Browser-safe",
     usedFor: "Browser sign-in launch and callback handling.",
-    source: "Create or copy the OIDC client id in Cubid Admin.",
+    source:
+      "Register a public client through the issuer's POST registration endpoint.",
   },
   {
     name: "NEXT_PUBLIC_CUBID_REDIRECT_URI",
@@ -35,7 +36,8 @@ const requiredEnv = [
     name: "CUBID_SIWC_CLIENT_ID",
     scope: "Server-only",
     usedFor: "Server-mediated authorization and code exchange.",
-    source: "Copy the registered relying-party client id from Cubid Admin.",
+    source:
+      "Use the client_id returned by issuer registration. See the README.",
   },
   {
     name: "CUBID_SIWC_REDIRECT_URI",
@@ -52,17 +54,41 @@ const requiredEnv = [
   {
     name: "CUBID_API_KEY",
     scope: "Server-only",
-    usedFor: "Dapp API calls for users, identity, score, stamps, and recovery metadata.",
+    usedFor:
+      "Dapp API calls for users, identity, score, stamps, and recovery metadata.",
     source: "Generate or copy your dapp API key in Cubid Admin.",
   },
 ];
 
 const optionalEnv = [
   {
+    name: "CUBID_SIWC_COOKIE_SECRET",
+    scope: "Server-only",
+    usedFor:
+      "Authenticated encryption of SIWC demo cookies. Required in production.",
+    notes:
+      "Generate with openssl rand -hex 32. Development uses a temporary process key when unset.",
+  },
+  {
+    name: "CUBID_SIWC_LOGIN_BASE_URL",
+    scope: "Server-only",
+    usedFor: "Optional public Login deployment diagnostic.",
+    notes:
+      "Defaults to https://login.cubid.me. Authorization uses issuer discovery independently.",
+  },
+  {
+    name: "CUBID_SIWC_SCOPE",
+    scope: "Server-only",
+    usedFor: "Scopes requested by the SIWC panel.",
+    notes:
+      "Defaults to openid profile email; request only scopes allowed for your client.",
+  },
+  {
     name: "CUBID_DAPP_ID",
     scope: "Server-only",
     usedFor: "Endpoints that require an explicit dapp id.",
-    notes: "Set it when your Cubid environment or API key is scoped by dapp id.",
+    notes:
+      "Set it when your Cubid environment or API key is scoped by dapp id.",
   },
   {
     name: "NEXT_PUBLIC_CUBID_CLEARPASS_PAGE_ID",
@@ -110,7 +136,9 @@ export function EnvReferencePanel() {
               size={17}
               aria-hidden="true"
             />
-            <h3 className="text-sm font-semibold">Required for Cubid to work</h3>
+            <h3 className="text-sm font-semibold">
+              Required for Cubid to work
+            </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] border-collapse text-left text-sm">

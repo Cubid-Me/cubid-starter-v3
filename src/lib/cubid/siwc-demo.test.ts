@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NextRequest, NextResponse } from "next/server";
 
 import {
   assertSiwcDiscoveryIssuer,
@@ -8,18 +9,71 @@ import {
   resolveLocalReturnTo,
   sanitizeSiwcDemoSession,
   traceEntry,
+  setSessionCookie,
+  readSessionCookie,
+  readTransactionCookie,
 } from "./siwc-demo";
 
 describe("SIWC demo safety helpers", () => {
+  it("authenticates cookie contents and prevents cookie purpose substitution", () => {
+    const response = NextResponse.json({});
+    setSessionCookie(response, new NextRequest("http://localhost:3000"), {
+      authenticatedAt: new Date().toISOString(),
+      claims: null,
+      clientId: "starter",
+      expiresAt: Date.now() + 60000,
+      issuer: "https://id.cubid.me",
+      scope: ["openid"],
+      subject: "pairwise-subject",
+      userInfo: null,
+    });
+    const value = response.cookies.get("cubid_siwc_demo_session")!.value;
+    const requestWith = (cookie: string) =>
+      new NextRequest("http://localhost:3000", { headers: { cookie } });
+    expect(
+      readSessionCookie(requestWith(`cubid_siwc_demo_session=${value}`))
+        ?.subject,
+    ).toBe("pairwise-subject");
+    const changed = `${value.slice(0, 30)}${value[30] === "a" ? "b" : "a"}${value.slice(31)}`;
+    expect(
+      readSessionCookie(requestWith(`cubid_siwc_demo_session=${changed}`)),
+    ).toBeNull();
+    expect(
+      readSessionCookie(
+        requestWith(
+          `cubid_siwc_demo_session=${Buffer.from(JSON.stringify({ authenticated: true })).toString("base64url")}`,
+        ),
+      ),
+    ).toBeNull();
+    expect(value).not.toContain("pairwise-subject");
+    expect(
+      readTransactionCookie(requestWith(`cubid_siwc_txn=${value}`)),
+    ).toBeNull();
+  });
+
+  it("does not report expired token sessions as signed in", () => {
+    expect(
+      buildSessionSummary({
+        authenticatedAt: new Date().toISOString(),
+        claims: null,
+        clientId: "starter",
+        expiresAt: Date.now() - 1,
+        issuer: "https://id.cubid.me",
+        scope: ["openid"],
+        subject: "expired",
+        userInfo: null,
+      }).authenticated,
+    ).toBe(false);
+  });
   it("accepts the configured discovery issuer and rejects a mismatch", () => {
     expect(() =>
-      assertSiwcDiscoveryIssuer("https://id.cubid.me", "https://id.cubid.me/")
+      assertSiwcDiscoveryIssuer("https://id.cubid.me", "https://id.cubid.me/"),
     ).not.toThrow();
     expect(() =>
       assertSiwcDiscoveryIssuer(
         "https://id.cubid.me",
-        "https://staging-id.cubid.me"
-      )
+        "https://staging-id.cubid.me",
+      ),
     ).toThrowError(/did not match/u);
   });
 
@@ -38,19 +92,19 @@ describe("SIWC demo safety helpers", () => {
     "/%2F%2Fevil.example/proof",
   ])("rejects authority-like encoded and decoded return path %s", (value) => {
     expect(normalizeReturnTo(value)).toBe("/");
-    expect(
-      resolveLocalReturnTo(value, "http://localhost:3000").origin
-    ).toBe("http://localhost:3000");
+    expect(resolveLocalReturnTo(value, "http://localhost:3000").origin).toBe(
+      "http://localhost:3000",
+    );
   });
 
   it("preserves a safe local path, query, and fragment", () => {
     const resolved = resolveLocalReturnTo(
       "/docs/siwc?tab=callback&next=%2Faccount#trace",
-      "http://localhost:3000"
+      "http://localhost:3000",
     );
 
     expect(resolved.href).toBe(
-      "http://localhost:3000/docs/siwc?tab=callback&next=%2Faccount#trace"
+      "http://localhost:3000/docs/siwc?tab=callback&next=%2Faccount#trace",
     );
   });
 
@@ -94,7 +148,7 @@ describe("SIWC demo safety helpers", () => {
           sub: "pairwise-subject",
         },
         clientId: "starter",
-        expiresAt: 1_800_000_000,
+        expiresAt: 1_900_000_000_000,
         issuer: "https://id.cubid.me",
         scope: ["openid", "email"],
         subject: "pairwise-subject",
@@ -103,7 +157,7 @@ describe("SIWC demo safety helpers", () => {
           sub: "pairwise-subject",
         },
       },
-      [trace]
+      [trace],
     );
     const serialized = JSON.stringify(summary);
 
@@ -137,7 +191,7 @@ describe("SIWC demo safety helpers", () => {
     });
     const recoverableCookiePayload = Buffer.from(
       Buffer.from(JSON.stringify(safe)).toString("base64url"),
-      "base64url"
+      "base64url",
     ).toString("utf8");
 
     expect(recoverableCookiePayload).not.toContain("person@example.com");
